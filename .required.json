@@ -1,0 +1,1 @@
+{"tut1":{"required":["readimage.c","ext2.h","Makefile"],"required_only":true},"tut2":{"required":["passthrough.c"],"required_only":false},"a1a":{"required":["a1fs.h"],"required_only":false},"tut3":{"required":[],"required_only":false},"tut4":{"required":[],"required_only":false},"a1b":{"required":[],"required_only":false}}
