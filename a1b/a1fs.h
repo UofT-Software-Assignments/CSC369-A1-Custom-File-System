@@ -52,7 +52,15 @@ typedef struct a1fs_superblock {
 	uint64_t size;
 
 	//TODO: add necessary fields
-
+	unsigned int inodes_count;		// total number of inodes
+	unsigned int blocks_count;		// total number of datablocks
+	unsigned int resv_block_count;	// number of datablocks reserved (for superblock, bitmaps, etc)
+	unsigned int free_inodes_count;	// number of unused inodes
+	unsigned int free_blocks_count;	// number of unused datablocks
+	a1fs_ino_t inode_bitmap;		// pointer to the inode bitmap
+	a1fs_ino_t inode_table;			// pointer to the inode table
+	a1fs_blk_t block_bitmap;		// pointer to the block bitmap
+	a1fs_blk_t first_block;			// pointer to the first datablock
 } a1fs_superblock;
 
 // Superblock must fit into a single block
@@ -103,6 +111,21 @@ typedef struct a1fs_inode {
 	// end of the struct in order to satisfy the assertion below. Try to keep
 	// the size of this struct minimal, but don't worry about the "wasted space"
 	// introduced by the required padding.
+
+	//The index of the inode in the inode bitmap
+	uint32_t inode_number;
+
+	//The number of extents in the file
+	uint16_t num_extents;
+
+	//The index of the data block containing the list of extents of the file
+	uint32_t extent_block_number;
+
+	//The pointer to the data block containing extents
+	uint32_t extents;
+	
+	//18 bytes of padding to make size of struct 64 bytes
+	uint8_t padding[14];
 
 } a1fs_inode;
 
