@@ -96,11 +96,16 @@ static bool parse_args(int argc, char *argv[], mkfs_opts *opts)
 static bool a1fs_is_present(void *image)
 {
 	//TODO: check if the image already contains a valid a1fs superblock
-	(void)image;
+	const struct a1fs_superblock *sb = (const struct a1fs_superblock *)(image);
+	if (sb->magic != A1FS_MAGIC){
+		return false;
+	}
 	return true;
 }
 
-
+unsigned int round_up_divide(unsigned int x, unsigned int y){
+	return x / y + ((x % y) != 0);
+}
 /**
  * Format the image into a1fs.
  *
@@ -116,9 +121,60 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 {
 	//TODO: initialize the superblock and create an empty root directory
 	//NOTE: the mode of the root directory inode should be set to S_IFDIR | 0777
-	(void)image;
-	(void)size;
-	(void)opts;
+	
+	
+	unsigned int inodes_count = opts->n_inodes;
+	unsigned int blocks_count = size / A1FS_BLOCK_SIZE;
+	unsigned int inodes_per_block = A1FS_BLOCK_SIZE / sizeof(a1fs_inode);
+	
+	//find number of blocks for inode table
+	unsigned int num_blocks_itable = round_up_divide(inodes_count, inodes_per_block);
+
+	//find number of blocks needed for the inode bitmap
+	unsigned int num_blocks_imap = round_up_divide(inodes_count, (unsigned int)(A1FS_BLOCK_SIZE));
+
+	//find number blocks needed for databitmap
+	unsigned int num_blocks_left = blocks_count - 1 - num_blocks_itable - num_blocks_imap;
+	unsigned int  num_blocks_dmap = round_up_divide(num_blocks_left, A1FS_BLOCK_SIZE);
+	//subtract number of 4096 bits that dont need representing
+	num_blocks_dmap -= num_blocks_dmap / A1FS_BLOCK_SIZE;
+
+	//find total number data blocks reserved
+	unsigned int resv_blocks_count = 1 + num_blocks_imap + num_blocks_itable + num_blocks_dmap;
+
+	//initialize free_inodes_count to inodes_count - 1 for root directory
+	unsigned int free_inodes_count = inodes_count - 1;
+
+	//initialize free_blocks_count
+	unsigned int free_blocks_count = blocks_count - resv_blocks_count - 1;
+
+	//initialize pointers
+
+	a1fs_blk_t data_bitmap = 1;
+	a1fs_ino_t inode_bitmap = data_bitmap + num_blocks_dmap;
+	a1fs_ino_t inode_table = inode_bitmap + num_blocks_imap;
+	a1fs_blk_t first_data_block = inode_table + num_blocks_itable;
+
+	a1fs_superblock *sb = (a1fs_superblock *)image;
+
+	//write superblock to image (taken care of by mmap, image acts like pointer into actual file)
+	
+	sb->magic = A1FS_MAGIC;
+	sb->size = size;
+	sb->inodes_count = inodes_count;
+	sb->blocks_count = blocks_count;
+	sb->resv_blocks_count = resv_blocks_count;
+	sb->free_inodes_count = free_inodes_count;
+	sb->free_blocks_count = free_blocks_count;
+	sb->data_bitmap = data_bitmap;
+	sb->inode_bitmap = inode_bitmap;
+	sb->inode_table = inode_table;
+	sb->first_data_block = first_data_block;
+
+	//TODO 
+	//initialize root directory !
+	
+
 	return false;
 }
 

@@ -54,13 +54,13 @@ typedef struct a1fs_superblock {
 	//TODO: add necessary fields
 	unsigned int inodes_count;		// total number of inodes
 	unsigned int blocks_count;		// total number of datablocks
-	unsigned int resv_block_count;	// number of datablocks reserved (for superblock, bitmaps, etc)
+	unsigned int resv_blocks_count;	// number of datablocks reserved (for superblock, bitmaps, etc)
 	unsigned int free_inodes_count;	// number of unused inodes
 	unsigned int free_blocks_count;	// number of unused datablocks
-	a1fs_ino_t inode_bitmap;		// pointer to the inode bitmap
-	a1fs_ino_t inode_table;			// pointer to the inode table
-	a1fs_blk_t block_bitmap;		// pointer to the block bitmap
-	a1fs_blk_t first_block;			// pointer to the first datablock
+	a1fs_blk_t data_bitmap;		    // block number of the data bitmap
+	a1fs_blk_t inode_bitmap;		// block number of the inode bitmap
+	a1fs_blk_t inode_table;			// block number of the inode table
+	a1fs_blk_t first_data_block;	// block number of the first datablock
 } a1fs_superblock;
 
 // Superblock must fit into a single block
