@@ -118,14 +118,11 @@ typedef struct a1fs_inode {
 	//The number of extents in the file
 	uint16_t num_extents;
 
-	//The index of the data block containing the list of extents of the file
-	uint32_t extent_block_number;
-
 	//The pointer to the data block containing extents
 	uint32_t extents;
 	
 	//18 bytes of padding to make size of struct 64 bytes
-	uint8_t padding[14];
+	uint8_t padding[18];
 
 } a1fs_inode;
 

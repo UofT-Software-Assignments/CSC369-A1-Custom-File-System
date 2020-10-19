@@ -22,6 +22,8 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#include <time.h>
+#include <string.h>
 
 #include "a1fs.h"
 #include "map.h"
@@ -173,9 +175,43 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 
 	//TODO 
 	//initialize root directory !
+
+	//cast data bitmap into array of unsigned char/ array of bytes
+	unsigned char *data_bitmap_as_array = image + sb->data_bitmap * A1FS_BLOCK_SIZE;
+	data_bitmap_as_array[0] = 3 << 6; // = 1100 0000
+
+	//same for inode bitmap
+	unsigned char *inode_bitmap_as_array = image + sb->inode_bitmap * A1FS_BLOCK_SIZE;
+	inode_bitmap_as_array[0] = 1 << 7; // = 1000 0000
+
+	
+	a1fs_inode *root_inode = image + sb->inode_table * A1FS_BLOCK_SIZE;
+
+	//populate root inode metadata
+	root_inode->mode = S_IFDIR;
+	root_inode->size = 2*sizeof(a1fs_dentry);
+	root_inode->links = 2;
+	clock_gettime(CLOCK_REALTIME, &(root_inode->mtime));
+	root_inode->inode_number = 0;
+	root_inode->num_extents = 1;
+	root_inode->extents = 0;
+	
+	//add first extent to extent map
+	a1fs_extent *extent = image + (sb->first_data_block + root_inode->extents) * A1FS_BLOCK_SIZE;
+	extent->start = 1;
+	extent->count = 1;
+
+	//add directory extries to root directory data block
+	a1fs_dentry *dot = image + (sb->first_data_block + extent->start) * A1FS_BLOCK_SIZE;
+	dot->ino = 0;
+	strcpy(dot->name, ".\0");
+
+	a1fs_dentry *dotdot = dot + sizeof(a1fs_dentry);
+	dotdot->ino = 0;
+	strcpy(dotdot->name, "..\0");
 	
 
-	return false;
+	return true;
 }
 
 
