@@ -108,15 +108,28 @@ static int a1fs_statfs(const char *path, struct statvfs *st)
 	(void)path;// unused
 	fs_ctx *fs = get_fs();
 
-	memset(st, 0, sizeof(*st));
-	st->f_bsize   = A1FS_BLOCK_SIZE;
-	st->f_frsize  = A1FS_BLOCK_SIZE;
 	//TODO: fill in the rest of required fields based on the information stored
 	// in the superblock
-	(void)fs;
-	st->f_namemax = A1FS_NAME_MAX;
+	
+	a1fs_superblock *sb = (a1fs_superblock *)(fs->image);
 
-	return -ENOSYS;
+	memset(st, 0, sizeof(*st));
+	st->f_bsize   = A1FS_BLOCK_SIZE;  /* Filesystem block size */
+	st->f_frsize  = A1FS_BLOCK_SIZE;  /* Fragment size */
+	st->f_blocks = fs->size / A1FS_BLOCK_SIZE;   /* Size of fs in f_frsize units */
+	st->f_bfree = sb->free_blocks_count;    /* Number of free blocks */
+	st->f_bavail = sb->free_blocks_count;   /* Number of free blocks for
+									unprivileged users */
+	st->f_files = sb->inodes_count;    /* Number of inodes */
+	st->f_ffree = sb->free_inodes_count;    /* Number of free inodes */
+	st->f_favail = sb->free_inodes_count;   /* Number of free inodes for
+									unprivileged users */
+	/*st->f_fsid = ; */    /* Filesystem ID */
+	/*st->f_flag = ; */    /* Mount flags */
+	st->f_namemax = A1FS_NAME_MAX;  /* Maximum filename length */
+	
+
+	return 0;
 }
 
 /**

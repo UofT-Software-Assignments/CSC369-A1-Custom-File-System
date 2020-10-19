@@ -26,6 +26,7 @@ bool fs_ctx_init(fs_ctx *fs, void *image, size_t size)
 
 	//TODO: check if the file system image can be mounted and initialize its
 	// runtime state
+
 	return true;
 }
 
