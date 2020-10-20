@@ -1,0 +1,9 @@
+make: Entering directory '/h/u2/csc369h/fall/pub/a1b-testing/runs/group_0609'
+gcc a1fs.c -o a1fs.o -c -MMD -D_FILE_OFFSET_BITS=64 -I/usr/include/fuse -g3 -Wall -Wextra -Werror 
+gcc fs_ctx.c -o fs_ctx.o -c -MMD -D_FILE_OFFSET_BITS=64 -I/usr/include/fuse -g3 -Wall -Wextra -Werror 
+gcc map.c -o map.o -c -MMD -D_FILE_OFFSET_BITS=64 -I/usr/include/fuse -g3 -Wall -Wextra -Werror 
+gcc options.c -o options.o -c -MMD -D_FILE_OFFSET_BITS=64 -I/usr/include/fuse -g3 -Wall -Wextra -Werror 
+gcc a1fs.o fs_ctx.o map.o options.o -o a1fs -lfuse -pthread 
+gcc mkfs.c -o mkfs.o -c -MMD -D_FILE_OFFSET_BITS=64 -I/usr/include/fuse -g3 -Wall -Wextra -Werror 
+gcc map.o mkfs.o -o mkfs.a1fs -lfuse -pthread 
+make: Leaving directory '/h/u2/csc369h/fall/pub/a1b-testing/runs/group_0609'

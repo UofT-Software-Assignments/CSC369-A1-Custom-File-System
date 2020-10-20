@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/h/u2/csc369h/fall/pub/a1b-testing/test.py", line 25, in run_test
+    test_function(submission, log)
+  File "/h/u2/csc369h/fall/pub/a1b-testing/tests.py", line 117, in test
+    s.format("64k", 4, "easy_mount")
+  File "/h/u2/csc369h/fall/pub/a1b-testing/submission.py", line 101, in format
+    wait_or_kill(proc, check=True, timeout=timeout,
+  File "/h/u2/csc369h/fall/pub/a1b-testing/util.py", line 66, in wait_or_kill
+    raise exception_chain(subprocess.CalledProcessError(ret, proc.args,
+subprocess.CalledProcessError: Command '['./mkfs.a1fs', '-i', '4', '_img_']' died with <Signals.SIGSEGV: 11>.
+
