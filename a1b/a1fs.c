@@ -110,19 +110,17 @@ static int a1fs_statfs(const char *path, struct statvfs *st)
 
 	//TODO: fill in the rest of required fields based on the information stored
 	// in the superblock
-	
-	a1fs_superblock *sb = (a1fs_superblock *)(fs->image);
 
 	memset(st, 0, sizeof(*st));
 	st->f_bsize   = A1FS_BLOCK_SIZE;  /* Filesystem block size */
 	st->f_frsize  = A1FS_BLOCK_SIZE;  /* Fragment size */
 	st->f_blocks = fs->size / A1FS_BLOCK_SIZE;   /* Size of fs in f_frsize units */
-	st->f_bfree = sb->free_blocks_count;    /* Number of free blocks */
-	st->f_bavail = sb->free_blocks_count;   /* Number of free blocks for
+	st->f_bfree = fs->sb->free_blocks_count;    /* Number of free blocks */
+	st->f_bavail = fs->sb->free_blocks_count;   /* Number of free blocks for
 									unprivileged users */
-	st->f_files = sb->inodes_count;    /* Number of inodes */
-	st->f_ffree = sb->free_inodes_count;    /* Number of free inodes */
-	st->f_favail = sb->free_inodes_count;   /* Number of free inodes for
+	st->f_files = fs->sb->inodes_count;    /* Number of inodes */
+	st->f_ffree = fs->sb->free_inodes_count;    /* Number of free inodes */
+	st->f_favail = fs->sb->free_inodes_count;   /* Number of free inodes for
 									unprivileged users */
 	/*st->f_fsid = ; */    /* Filesystem ID */
 	/*st->f_flag = ; */    /* Mount flags */
@@ -220,6 +218,74 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 
 /**
+ * return inode number of the the entry with name entry_name inside directory
+ * return -1 if the entry can not be found
+**/
+int find_entry_inode(a1fs_inode directory, char *entry_name, fs_ctx *fs){
+    
+	int max_entries_per_block = A1FS_BLOCK_SIZE / sizeof(a1fs_extent);
+
+	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + directory.extents) * A1FS_BLOCK_SIZE;
+
+	for(int i = 0; i < directory.num_extents; i++){
+		a1fs_extent extent = extents[i];
+
+		for(unsigned int j = extent.start; j < extent.start + extent.count; j++){
+			a1fs_dentry *dentries = fs->image + (fs->sb->first_data_block + j) * A1FS_BLOCK_SIZE;
+
+			int num_entries = max_entries_per_block;
+			if(i == (directory.num_extents - 1) && j == (extent.start + extent.count - 1)){
+				num_entries = (directory.size % A1FS_BLOCK_SIZE) / sizeof(a1fs_extent); 
+			}
+
+			for(int k = 0; k < num_entries; k++){
+
+				a1fs_dentry dentry = dentries[k];
+
+				if(strcmp(dentry.name, entry_name) == 0){
+					return dentry.ino;
+				}
+			}
+		}
+	}
+	return -1;
+	
+}
+
+/**
+ * return inode number of the file specified at path
+ * return -1 if the file can not be found
+**/
+int path_lookup(char *path, fs_ctx *fs){
+	if(path[0] != '/') {
+        fprintf(stderr, "Not an absolute path\n");
+        return -1;
+    }
+
+	char pathstring[A1FS_PATH_MAX];
+    strncpy(pathstring, path, A1FS_PATH_MAX - 1);
+    pathstring[A1FS_PATH_MAX - 1] = '\0';
+	int inode_number = 0; //start at root inode
+
+	
+	a1fs_inode *itable = (a1fs_inode *)(fs->image + (fs->sb->inode_table) * A1FS_BLOCK_SIZE);
+
+	char *component = strtok(pathstring, "/");
+	while(component != NULL){
+
+        a1fs_inode directory = itable[inode_number];
+        
+        if((inode_number = find_entry_inode(directory, component, fs)) == -1){
+           return -1;
+        }
+
+        component = strtok(NULL, "/");
+    }
+
+	return inode_number;
+}
+
+/**
  * Create a directory.
  *
  * Implements the mkdir() system call.
@@ -246,6 +312,14 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	(void)path;
 	(void)mode;
 	(void)fs;
+	a1fs_superblock *sb = (a1fs_superblock *)(fs->image);
+
+	if(!sb->free_inodes_count || !(sb->free_blocks_count - 1)){
+		return -ENOSPC;
+	}
+
+	
+
 	return -ENOSYS;
 }
 
