@@ -130,29 +130,39 @@ static int a1fs_statfs(const char *path, struct statvfs *st)
 	return 0;
 }
 
+/**
+ * return array of directory entries contained in directory
+ * NOTE: array pointer must be freed when using this function
+ * 
+**/
 a1fs_dentry *get_entries(a1fs_inode directory, fs_ctx *fs){
 
 	a1fs_dentry *entries;
-	if((entries = malloc(directory.size)) == NULL){
-		return NULL;
-	}
+	if((entries = malloc(directory.size)) == NULL) return NULL;
+
+	//used to keep track of where we are copying data to in memcpy
 	void *dest = (void *)entries;
 
+	//pointer to array of extents for directory
 	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + directory.extents) * A1FS_BLOCK_SIZE;
 
+	//loop through extents
 	for(int i = 0; i < directory.num_extents; i++){
 		a1fs_extent extent = extents[i];
 		
+		//loop through data blocks in the current extent
 		for(unsigned int j = extent.start; j < extent.start + extent.count; j++){
+			//point to start of current data block
 			const void *src = fs->image + (fs->sb->first_data_block + j) * A1FS_BLOCK_SIZE;
 			
+			//if last data block, only copy whats left in directory
 			if(i == (directory.num_extents - 1) && j == (extent.start + extent.count - 1)){
 				memcpy(dest, src, directory.size % A1FS_BLOCK_SIZE);
-			}
+			} // else copy whole block
 			else{
 				memcpy(dest, src, A1FS_BLOCK_SIZE);
 			}
-
+			//move dest so we dont overwrite whats already copied into entries 
 			dest += A1FS_BLOCK_SIZE;
 
 		}
@@ -161,12 +171,15 @@ a1fs_dentry *get_entries(a1fs_inode directory, fs_ctx *fs){
 	
 }
 
+/**
+ * populate ino with the inode number associated with entry_name in directory
+ * return 0 on success, else return -errno
+**/
 int find_entry_inode(a1fs_inode directory, char *entry_name, int *ino, fs_ctx *fs){
     
 	a1fs_dentry *entries;
-	if((entries = get_entries(directory, fs)) == NULL){
-		return -ENOMEM;
-	}
+	if((entries = get_entries(directory, fs)) == NULL) return -ENOMEM;
+
 	int num_entries = directory.size / sizeof(a1fs_dentry);
 
 	for(int i = 0; i < num_entries; i++){
@@ -192,12 +205,14 @@ int path_lookup(const char *path, a1fs_inode *result, fs_ctx *fs){
         fprintf(stderr, "Not an absolute path\n");
         return -1;
     }
+	//copy path to pathstring bc path is const;
 	char pathstring[A1FS_PATH_MAX];
     strncpy(pathstring, path, A1FS_PATH_MAX - 1);
-    pathstring[A1FS_PATH_MAX - 1] = '\0';
+    pathstring[A1FS_PATH_MAX - 1] = '\0'; // null terminate
 	int inode_number = 0; //start at root inode
 	int error;
 
+	//array of inodes in inode table
 	a1fs_inode *itable = (a1fs_inode *)(fs->image + (fs->sb->inode_table) * A1FS_BLOCK_SIZE);
 
 	char *component = strtok(pathstring, "/");
