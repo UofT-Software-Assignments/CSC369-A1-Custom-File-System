@@ -1,0 +1,33 @@
+FUSE library version: 2.9.7
+nullpath_ok: 0
+nopath: 0
+utime_omit_ok: 0
+unique: 1, opcode: INIT (26), nodeid: 0, insize: 56, pid: 0
+INIT: 7.26
+flags=0x001ffffb
+max_readahead=0x00020000
+   INIT: 7.19
+   flags=0x00000011
+   max_readahead=0x00020000
+   max_write=0x00001000
+   max_background=0
+   congestion_threshold=0
+   unique: 1, success, outsize: 40
+unique: 2, opcode: GETATTR (3), nodeid: 1, insize: 56, pid: 36892
+getattr /
+   unique: 2, success, outsize: 120
+unique: 3, opcode: ACCESS (34), nodeid: 1, insize: 48, pid: 31708
+   unique: 3, error: -38 (Function not implemented), outsize: 16
+unique: 4, opcode: STATFS (17), nodeid: 1, insize: 40, pid: 36894
+statfs /
+   unique: 4, success, outsize: 96
+unique: 5, opcode: LOOKUP (1), nodeid: 1, insize: 45, pid: 36894
+LOOKUP /file
+getattr /file
+   unique: 5, error: -2 (No such file or directory), outsize: 16
+unique: 6, opcode: CREATE (35), nodeid: 1, insize: 61, pid: 36894
+create flags: 0x8241 /file 0100644 umask=0022
+   unique: 6, error: -38 (Function not implemented), outsize: 16
+unique: 7, opcode: MKNOD (8), nodeid: 1, insize: 61, pid: 36894
+create flags: 0xc1 /file 0100644 umask=0022
+   unique: 7, error: -38 (Function not implemented), outsize: 16
