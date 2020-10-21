@@ -360,7 +360,7 @@ int allocate_inode(fs_ctx *fs, int *inode_number){
 				// Set inode_number
 				*inode_number = bits_iterated + n;
 				// Change the value of the bit to 1
-				// TODO
+				currByte = currByte | (1 << n);
 			}
 		}
 		// increase the counter for number of bits iterated
