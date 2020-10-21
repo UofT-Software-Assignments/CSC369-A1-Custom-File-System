@@ -23,7 +23,6 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <time.h>
-#include <string.h>
 
 #include "a1fs.h"
 #include "map.h"
@@ -135,8 +134,14 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	//find number of blocks needed for the inode bitmap
 	unsigned int num_blocks_imap = round_up_divide(inodes_count, (unsigned int)(A1FS_BLOCK_SIZE));
 
-	//find number blocks needed for databitmap
+	//count number blocks left after allocating for superblock, inode table, inode bitmap
 	unsigned int num_blocks_left = blocks_count - 1 - num_blocks_itable - num_blocks_imap;
+
+	if(num_blocks_left < 2){
+		return false; // options were invalid to leave less than 2 blocks for data bitmap + data blocks
+	}
+
+	//find number blocks needed for databitmap
 	unsigned int  num_blocks_dmap = round_up_divide(num_blocks_left, A1FS_BLOCK_SIZE);
 	//subtract number of 4096 bits that dont need representing
 	num_blocks_dmap -= num_blocks_dmap / A1FS_BLOCK_SIZE;
@@ -189,26 +194,12 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 
 	//populate root inode metadata
 	root_inode->mode = S_IFDIR;
-	root_inode->size = 2*sizeof(a1fs_dentry);
+	root_inode->size = 0;
 	root_inode->links = 2;
 	clock_gettime(CLOCK_REALTIME, &(root_inode->mtime));
 	root_inode->inode_number = 0;
-	root_inode->num_extents = 1;
-	root_inode->extents = 0;
-	
-	//add first extent to extent map
-	a1fs_extent *extent = image + (sb->first_data_block + root_inode->extents) * A1FS_BLOCK_SIZE;
-	extent->start = 1;
-	extent->count = 1;
-
-	//add directory extries to root directory data block
-	a1fs_dentry *dot = image + (sb->first_data_block + extent->start) * A1FS_BLOCK_SIZE;
-	dot->ino = 0;
-	strcpy(dot->name, ".\0");
-
-	a1fs_dentry *dotdot = dot + sizeof(a1fs_dentry);
-	dotdot->ino = 0;
-	strcpy(dotdot->name, "..\0");
+	root_inode->num_extents = 0;
+	root_inode->extents = -1; //initialize to -1 when file is empty
 	
 
 	return true;

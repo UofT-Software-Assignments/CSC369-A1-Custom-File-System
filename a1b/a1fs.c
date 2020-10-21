@@ -131,6 +131,78 @@ static int a1fs_statfs(const char *path, struct statvfs *st)
 }
 
 /**
+ * return inode number of the the entry with name entry_name inside directory
+ * return -1 if the entry can not be found
+**/
+int find_entry_inode(a1fs_inode directory, char *entry_name, fs_ctx *fs){
+    
+	int max_entries_per_block = A1FS_BLOCK_SIZE / sizeof(a1fs_extent);
+
+	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + directory.extents) * A1FS_BLOCK_SIZE;
+
+	for(int i = 0; i < directory.num_extents; i++){
+		a1fs_extent extent = extents[i];
+
+		for(unsigned int j = extent.start; j < extent.start + extent.count; j++){
+			a1fs_dentry *dentries = fs->image + (fs->sb->first_data_block + j) * A1FS_BLOCK_SIZE;
+
+			int num_entries = max_entries_per_block;
+			if(i == (directory.num_extents - 1) && j == (extent.start + extent.count - 1)){
+				num_entries = (directory.size % A1FS_BLOCK_SIZE) / sizeof(a1fs_extent); 
+			}
+
+			for(int k = 0; k < num_entries; k++){
+
+				a1fs_dentry dentry = dentries[k];
+
+				if(strcmp(dentry.name, entry_name) == 0){
+					return dentry.ino;
+				}
+			}
+		}
+	}
+	return -1;
+	
+}
+
+/**
+ * populate the a1fs_inode result
+ * return 0 on success, errno on error
+**/
+int path_lookup(const char *path, a1fs_inode *result, fs_ctx *fs){
+	if(path[0] != '/') {
+        fprintf(stderr, "Not an absolute path\n");
+        return -1;
+    }
+
+	char pathstring[A1FS_PATH_MAX];
+    strncpy(pathstring, path, A1FS_PATH_MAX - 1);
+    pathstring[A1FS_PATH_MAX - 1] = '\0';
+	int inode_number = 0; //start at root inode
+
+	
+	a1fs_inode *itable = (a1fs_inode *)(fs->image + (fs->sb->inode_table) * A1FS_BLOCK_SIZE);
+
+	char *component = strtok(pathstring, "/");
+	while(component != NULL){
+
+        a1fs_inode dir_inode = itable[inode_number];
+
+		if(dir_inode.mode != S_IFDIR) return ENOTDIR;
+			
+        if((inode_number = find_entry_inode(dir_inode, component, fs)) == -1) return ENOENT;
+
+        component = strtok(NULL, "/");
+    }
+	*result = itable[inode_number];
+	return 0;
+}
+
+unsigned int round_up_divide(unsigned int x, unsigned int y){
+	return x / y + ((x % y) != 0);
+}
+
+/**
  * Get file or directory attributes.
  *
  * Implements the lstat() system call. See "man 2 lstat" for details.
@@ -156,23 +228,23 @@ static int a1fs_getattr(const char *path, struct stat *st)
 
 	memset(st, 0, sizeof(*st));
 
-	//NOTE: This is just a placeholder that allows the file system to be mounted
-	// without errors. You should remove this from your implementation.
-	if (strcmp(path, "/") == 0) {
-		//NOTE: all the fields set below are required and must be set according
-		// to the information stored in the corresponding inode
-		st->st_mode = S_IFDIR | 0777;
-		st->st_nlink = 2;
-		st->st_size = 0;
-		st->st_blocks = 0 * A1FS_BLOCK_SIZE / 512;
-		st->st_mtim = (struct timespec){0};
-		return 0;
-	}
-
 	//TODO: lookup the inode for given path and, if it exists, fill in the
 	// required fields based on the information stored in the inode
-	(void)fs;
-	return -ENOSYS;
+
+	a1fs_inode inode;
+	int error = path_lookup(path, &inode, fs);
+	if(error != 0) return -error;
+	
+	//NOTE: all the fields set below are required and must be set according
+	// to the information stored in the corresponding inode
+	st->st_ino = inode.inode_number;
+	st->st_mode = inode.mode;
+	st->st_nlink = inode.links;
+	st->st_size = inode.size;
+	st->st_blocks = round_up_divide(inode.size, A1FS_BLOCK_SIZE) * (A1FS_BLOCK_SIZE / 512);
+	st->st_mtim = inode.mtime;
+	
+	return 0;
 }
 
 /**
@@ -214,75 +286,6 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	// directory entries
 	(void)fs;
 	return -ENOSYS;
-}
-
-
-/**
- * return inode number of the the entry with name entry_name inside directory
- * return -1 if the entry can not be found
-**/
-int find_entry_inode(a1fs_inode directory, char *entry_name, fs_ctx *fs){
-    
-	int max_entries_per_block = A1FS_BLOCK_SIZE / sizeof(a1fs_extent);
-
-	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + directory.extents) * A1FS_BLOCK_SIZE;
-
-	for(int i = 0; i < directory.num_extents; i++){
-		a1fs_extent extent = extents[i];
-
-		for(unsigned int j = extent.start; j < extent.start + extent.count; j++){
-			a1fs_dentry *dentries = fs->image + (fs->sb->first_data_block + j) * A1FS_BLOCK_SIZE;
-
-			int num_entries = max_entries_per_block;
-			if(i == (directory.num_extents - 1) && j == (extent.start + extent.count - 1)){
-				num_entries = (directory.size % A1FS_BLOCK_SIZE) / sizeof(a1fs_extent); 
-			}
-
-			for(int k = 0; k < num_entries; k++){
-
-				a1fs_dentry dentry = dentries[k];
-
-				if(strcmp(dentry.name, entry_name) == 0){
-					return dentry.ino;
-				}
-			}
-		}
-	}
-	return -1;
-	
-}
-
-/**
- * return inode number of the file specified at path
- * return -1 if the file can not be found
-**/
-int path_lookup(char *path, fs_ctx *fs){
-	if(path[0] != '/') {
-        fprintf(stderr, "Not an absolute path\n");
-        return -1;
-    }
-
-	char pathstring[A1FS_PATH_MAX];
-    strncpy(pathstring, path, A1FS_PATH_MAX - 1);
-    pathstring[A1FS_PATH_MAX - 1] = '\0';
-	int inode_number = 0; //start at root inode
-
-	
-	a1fs_inode *itable = (a1fs_inode *)(fs->image + (fs->sb->inode_table) * A1FS_BLOCK_SIZE);
-
-	char *component = strtok(pathstring, "/");
-	while(component != NULL){
-
-        a1fs_inode directory = itable[inode_number];
-        
-        if((inode_number = find_entry_inode(directory, component, fs)) == -1){
-           return -1;
-        }
-
-        component = strtok(NULL, "/");
-    }
-
-	return inode_number;
 }
 
 /**
