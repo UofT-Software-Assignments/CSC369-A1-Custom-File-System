@@ -334,44 +334,39 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
  * @return int 0 on success, -1 on error
  */
 int allocate_inode(fs_ctx *fs, int *inode_number){
-	const unsigned char *inode_bitmap = fs->image + (fs->sb->inode_bitmap) * A1FS_BLOCK_SIZE;
-	const int num_inode = fs->sb->inodes_count;
-
+    unsigned char *inode_bitmap = fs->image + (fs->sb->inode_bitmap) * A1FS_BLOCK_SIZE;
+	const int num_inodes = fs->sb->inodes_count;
+	const int num_bytes = num_inodes / 8;
+	
 	int bits_iterated = 0;
-	int remaining_Bits = 8;
+	int remaining_bits = 8;
 	int i = 0;
-	int found = 0;
-	while (i < num_inode && found == 0){
+	while (i < num_bytes + 1){
 		// the 8 bits that we are iterating
-		unsigned char current_byte = inodeBitmap[i];
+		unsigned char current_byte = inode_bitmap[i];
 
 		// number of bits of the current byte that needs to be counted
-		if ((num_inode - bits_iterated) >= 8){
-			remaining_Bits = 8;
+		if ((num_inodes - bits_iterated) >= 8){
+			remaining_bits = 8;
 		} else {
-			remaining_Bits = num_inode - bits_iterated;
+			remaining_bits = num_inodes - bits_iterated;
 		}
 		
 		// iterate through each bit to see if an inode is free
-		for (int n = 0; n < remaining_Bits; n++){
+		for (int n = 0; n < remaining_bits; n++){
 			if (!(current_byte & (1 << n))){
-				// Turn on the flag
-				found = 1;
-				// Set inode_number
-				*inode_number = bits_iterated + n;
-				// Change the value of the bit to 1
-				current_byte = current_byte | (1 << n);
+
+				*inode_number = bits_iterated + n; // Set inode_number
+				
+				inode_bitmap[i] = current_byte | (1 << n); // Change the value of the bit to 1 in the inode bitmap
+				return 0; //success
 			}
 		}
 		// increase the counter for number of bits iterated
-		bits_iterated += remaining_Bits;
+		bits_iterated += remaining_bits;
 		i++;
 	}
-	if (found == 0){
-		return -1;
-	} else{
-		return 0;
-	}
+	return -1; // no free inode found
 
 }
 
@@ -400,8 +395,8 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 
 	//TODO: create a directory at given path with given mode
 	int inode_number;
-	if ((allocate_inode(fs, &inode_number)) !== 0){
-		return -ENOSPC
+	if ((allocate_inode(fs, &inode_number)) != 0){
+		return -ENOSPC;
 	}
 	a1fs_inode *directory = fs->image + (fs->sb->inode_table + inode_number) * A1FS_BLOCK_SIZE;
 	directory->inode_number = inode_number;
@@ -423,7 +418,6 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 
 	return -ENOSYS;
 }
-
 
 
 /**
