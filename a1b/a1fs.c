@@ -343,7 +343,7 @@ int allocate_inode(fs_ctx *fs, int *inode_number){
 	int found = 0;
 	while (i < num_inode && found == 0){
 		// the 8 bits that we are iterating
-		unsigned char currByte = inodeBitmap[i];
+		unsigned char current_byte = inodeBitmap[i];
 
 		// number of bits of the current byte that needs to be counted
 		if ((num_inode - bits_iterated) >= 8){
@@ -354,13 +354,13 @@ int allocate_inode(fs_ctx *fs, int *inode_number){
 		
 		// iterate through each bit to see if an inode is free
 		for (int n = 0; n < remaining_Bits; n++){
-			if (!(currByte & (1 << n))){
+			if (!(current_byte & (1 << n))){
 				// Turn on the flag
 				found = 1;
 				// Set inode_number
 				*inode_number = bits_iterated + n;
 				// Change the value of the bit to 1
-				currByte = currByte | (1 << n);
+				current_byte = current_byte | (1 << n);
 			}
 		}
 		// increase the counter for number of bits iterated
