@@ -1,9 +1,3 @@
-Traceback (most recent call last):
-  File "/h/u2/csc369h/fall/pub/a1b-testing/test.py", line 25, in run_test
-    test_function(submission, log)
-  File "/h/u2/csc369h/fall/pub/a1b-testing/tests.py", line 166, in test
-    s.mount()
-  File "/h/u2/csc369h/fall/pub/a1b-testing/submission.py", line 179, in mount
-    os.mkdir(self.mnt_path)
-FileExistsError: [Errno 17] File exists: '/tmp/_testmnt_'
-
+Try statvfs:    os.statvfs_result(f_bsize=4096, f_frsize=4096, f_blocks=16, f_bfree=11, 
+                f_bavail=11, f_files=4, f_ffree=3, f_favail=3, f_flag=4102, f_namemax=252)
+Elapsed time: 0.23628058703616261 seconds
