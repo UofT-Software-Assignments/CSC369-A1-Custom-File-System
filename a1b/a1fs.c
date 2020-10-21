@@ -326,6 +326,56 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 }
 
 /**
+ * Traverses the inode_bitmap and allocate the first available inode
+ * return 0 on success, return -1 on error
+ * 
+ * @param fs 			file system context
+ * @param inode_number 	index of free inode found, -1 if not found
+ * @return int 0 on success, -1 on error
+ */
+int allocate_inode(fs_ctx *fs, int *inode_number){
+	const unsigned char *inode_bitmap = fs->image + (fs->sb->inode_bitmap) * A1FS_BLOCK_SIZE;
+	const int num_inode = fs->sb->inodes_count;
+
+	int bits_iterated = 0;
+	int remaining_Bits = 8;
+	int i = 0;
+	int found = 0;
+	while (i < num_inode && found == 0){
+		// the 8 bits that we are iterating
+		unsigned char currByte = inodeBitmap[i];
+
+		// number of bits of the current byte that needs to be counted
+		if ((num_inode - bits_iterated) >= 8){
+			remaining_Bits = 8;
+		} else {
+			remaining_Bits = num_inode - bits_iterated;
+		}
+		
+		// iterate through each bit to see if an inode is free
+		for (int n = 0; n < remaining_Bits; n++){
+			if (!(currByte & (1 << n))){
+				// Turn on the flag
+				found = 1;
+				// Set inode_number
+				*inode_number = bits_iterated + n;
+				// Change the value of the bit to 1
+				// TODO
+			}
+		}
+		// increase the counter for number of bits iterated
+		bits_iterated += remaining_Bits;
+		i++;
+	}
+	if (found == 0){
+		return -1;
+	} else{
+		return 0;
+	}
+
+}
+
+/**
  * Create a directory.
  *
  * Implements the mkdir() system call.
@@ -349,11 +399,16 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	fs_ctx *fs = get_fs();
 
 	//TODO: create a directory at given path with given mode
-	(void)path;
-	(void)mode;
-	(void)fs;
+	int inode_number;
+	if ((allocate_inode(fs, &inode_number)) !== 0){
+		return -ENOSPC
+	}
+	a1fs_inode *directory = fs->image + (fs->sb->inode_table + inode_number) * A1FS_BLOCK_SIZE;
+	directory->inode_number = inode_number;
+	directory->mode = mode;
+	directory->links = 2;	// ".." and "."
+	directory->size = 0;
 	
-
 	if(!fs->sb->free_inodes_count || !(fs->sb->free_blocks_count - 1)){
 		return -ENOSPC;
 	}
@@ -368,6 +423,8 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 
 	return -ENOSYS;
 }
+
+
 
 /**
  * Remove a directory.
