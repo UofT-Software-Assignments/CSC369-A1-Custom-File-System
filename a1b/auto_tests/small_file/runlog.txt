@@ -1,11 +1,9 @@
 Traceback (most recent call last):
   File "/h/u2/csc369h/fall/pub/a1b-testing/test.py", line 25, in run_test
     test_function(submission, log)
-  File "/h/u2/csc369h/fall/pub/a1b-testing/tests.py", line 445, in test
-    s.format("64k", 16, "small_file")
-  File "/h/u2/csc369h/fall/pub/a1b-testing/submission.py", line 101, in format
-    wait_or_kill(proc, check=True, timeout=timeout,
-  File "/h/u2/csc369h/fall/pub/a1b-testing/util.py", line 66, in wait_or_kill
-    raise exception_chain(subprocess.CalledProcessError(ret, proc.args,
-subprocess.CalledProcessError: Command '['./mkfs.a1fs', '-i', '16', '_img_']' died with <Signals.SIGSEGV: 11>.
+  File "/h/u2/csc369h/fall/pub/a1b-testing/tests.py", line 446, in test
+    s.mount()
+  File "/h/u2/csc369h/fall/pub/a1b-testing/submission.py", line 179, in mount
+    os.mkdir(self.mnt_path)
+FileExistsError: [Errno 17] File exists: '/tmp/_testmnt_'
 
