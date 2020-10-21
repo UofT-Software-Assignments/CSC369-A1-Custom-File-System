@@ -130,37 +130,51 @@ static int a1fs_statfs(const char *path, struct statvfs *st)
 	return 0;
 }
 
-/**
- * return inode number of the the entry with name entry_name inside directory
- * return -1 if the entry can not be found
-**/
-int find_entry_inode(a1fs_inode directory, char *entry_name, fs_ctx *fs){
-    
-	int max_entries_per_block = A1FS_BLOCK_SIZE / sizeof(a1fs_extent);
+a1fs_dentry *get_entries(a1fs_inode directory, fs_ctx *fs){
+
+	a1fs_dentry *entries;
+	if((entries = malloc(directory.size)) == NULL){
+		return NULL;
+	}
+	void *dest = (void *)entries;
 
 	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + directory.extents) * A1FS_BLOCK_SIZE;
 
 	for(int i = 0; i < directory.num_extents; i++){
 		a1fs_extent extent = extents[i];
-
+		
 		for(unsigned int j = extent.start; j < extent.start + extent.count; j++){
-			a1fs_dentry *dentries = fs->image + (fs->sb->first_data_block + j) * A1FS_BLOCK_SIZE;
-
-			int num_entries = max_entries_per_block;
+			const void *src = fs->image + (fs->sb->first_data_block + j) * A1FS_BLOCK_SIZE;
+			
 			if(i == (directory.num_extents - 1) && j == (extent.start + extent.count - 1)){
-				num_entries = (directory.size % A1FS_BLOCK_SIZE) / sizeof(a1fs_extent); 
+				memcpy(dest, src, directory.size % A1FS_BLOCK_SIZE);
+			}
+			else{
+				memcpy(dest, src, A1FS_BLOCK_SIZE);
 			}
 
-			for(int k = 0; k < num_entries; k++){
+			dest += A1FS_BLOCK_SIZE;
 
-				a1fs_dentry dentry = dentries[k];
-
-				if(strcmp(dentry.name, entry_name) == 0){
-					return dentry.ino;
-				}
-			}
 		}
 	}
+	return entries;
+	
+}
+
+int find_entry_inode(a1fs_inode directory, char *entry_name, fs_ctx *fs){
+    
+	a1fs_dentry *entries = get_entries(directory, fs);
+	int num_entries = directory.size / sizeof(a1fs_dentry);
+
+	for(int i = 0; i < num_entries; i++){
+		a1fs_dentry entry = entries[i];
+
+		if(strcmp(entry.name, entry_name) == 0){
+			free(entries);
+			return entry.ino;
+		}
+	}
+	free(entries);
 	return -1;
 	
 }
@@ -274,18 +288,28 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	(void)fi;// unused
 	fs_ctx *fs = get_fs();
 
-	//NOTE: This is just a placeholder that allows the file system to be mounted
-	// without errors. You should remove this from your implementation.
-	if (strcmp(path, "/") == 0) {
-		filler(buf, "." , NULL, 0);
-		filler(buf, "..", NULL, 0);
-		return 0;
-	}
-
 	//TODO: lookup the directory inode for given path and iterate through its
 	// directory entries
-	(void)fs;
-	return -ENOSYS;
+	
+	a1fs_inode directory;
+	path_lookup(path, &directory, fs);
+	a1fs_dentry *entries;
+	if((entries = get_entries(directory, fs)) == NULL){
+		return -ENOMEM;
+	}
+	int num_entries = directory.size / sizeof(a1fs_dentry);
+
+	if(filler(buf, "." , NULL, 0) + filler(buf, "..", NULL, 0) > 0) return -ENOMEM;
+	
+
+	for(int i = 0; i < num_entries; i++){
+		a1fs_dentry entry = entries[i];
+		if(filler(buf, entry.name, NULL, 0) == 1) return -ENOMEM;
+	}
+	free(entries);
+		
+	return 0;
+
 }
 
 /**
