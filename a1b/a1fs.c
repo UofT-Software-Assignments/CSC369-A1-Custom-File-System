@@ -22,6 +22,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <time.h>
+#include <libgen.h>
 
 // Using 2.9.x FUSE API
 #define FUSE_USE_VERSION 29
@@ -394,37 +395,36 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	mode = mode | S_IFDIR;
 	fs_ctx *fs = get_fs();
 
-	//TODO: create a directory at given path with given mode	
-	if(!fs->sb->free_inodes_count || !(fs->sb->free_blocks_count - 1)){
-		return -ENOSPC;
-	}
-
-	a1fs_inode parent_dir;
-	path_lookup(path, &parent_dir, fs);
-
-	//allocate inode in bitmap, get inode number from this
-	//no data blocks allocated since directory is empty
-
+	//TODO: create a directory at given path with given mode
 	int inode_number;
 	if ((allocate_inode(fs, &inode_number)) != 0){
 		return -ENOSPC;
 	}
-	// Create the directory only if there exists an available slot
-	a1fs_inode *directory = fs->image + (fs->sb->inode_table + inode_number) * sizeof(a1fs_inode);
+	a1fs_inode *directory = fs->image + (fs->sb->inode_table + inode_number) * A1FS_BLOCK_SIZE;
 	directory->inode_number = inode_number;
 	directory->mode = mode;
 	directory->links = 2;	// ".." and "."
 	directory->size = 0;
-	struct timespec res;
-	clock_gettime(CLOCK_REALTIME, &res);
-	directory->mtime = res;
-	directory->num_extents = 0;
-	uint32_t empty_extents_ptr = 0;
-	directory->extents = empty_extents_ptr;
-	uint8_t pad = 0;
-	for (int i = 0; i < 18; i++){
-		directory->padding[i] = pad;
+	
+	if(!fs->sb->free_inodes_count || !(fs->sb->free_blocks_count - 1)){
+		return -ENOSPC;
 	}
+
+	char pathstring[A1FS_PATH_MAX];
+	strcpy(pathstring, path);
+
+	char *filename = basename(pathstring);
+	char *parent_path = dirname(pathstring);
+
+	(void)filename;
+
+	a1fs_inode parent_dir;
+	path_lookup((const char *)(parent_path), &parent_dir, fs);
+
+	//allocate inode in bitmap, get inode number from this
+	//no data blocks allocated since directory is empty
+
+	//int inode_number = allocate_inode(fs);
 
 	return -ENOSYS;
 }
