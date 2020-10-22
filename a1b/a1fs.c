@@ -487,7 +487,7 @@ static int a1fs_rmdir(const char *path)
 
 	deallocate_inode(directory, fs);
 	
-	return -ENOSYS;
+	return 0;
 }
 
 /**
