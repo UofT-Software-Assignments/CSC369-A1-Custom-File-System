@@ -517,9 +517,8 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	fs_ctx *fs = get_fs();
 
 	//TODO: create a file at given path with given mode
-	(void)path;
-	(void)mode;
-	(void)fs;
+
+	
 	int error, inode_number;
 	if((error = allocate_inode(fs, &inode_number)) != 0) return error;
 
@@ -533,6 +532,11 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	inode->inode_number = inode_number;
 	inode->num_extents = 0;
 	inode->extents = -1;
+
+	//split path string into parent directory and filename
+
+	//update parent directory with new file
+	(void)path;
 
 	return 0;
 }
@@ -557,7 +561,12 @@ static int a1fs_unlink(const char *path)
 	//TODO: remove the file at given path
 	(void)path;
 	(void)fs;
-	return -ENOSYS;
+
+	a1fs_inode inode;
+	path_lookup(path, &inode, fs);
+	deallocate_inode(inode, fs);
+
+	return 0;
 }
 
 
@@ -584,10 +593,16 @@ static int a1fs_utimens(const char *path, const struct timespec times[2])
 	//TODO: update the modification timestamp (mtime) in the inode for given
 	// path with either the time passed as argument or the current time,
 	// according to the utimensat man page
-	(void)path;
-	(void)times;
-	(void)fs;
-	return -ENOSYS;
+	a1fs_inode inode;
+	path_lookup(path, &inode, fs);
+	if(times[1].tv_nsec == UTIME_NOW){
+		clock_gettime(CLOCK_REALTIME, &inode.mtime);
+	}
+	else{
+		inode.mtime = times[1]; //times[1] is last modification time
+	}
+	
+	return 0;
 }
 
 /**
