@@ -419,6 +419,47 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	return -ENOSYS;
 }
 
+/**
+ * change data bitmap at index block_number to 0
+ * 
+ * @param block_number  the index of the block to deallocate
+ * @param fs            file system context
+**/
+void deallocate_block(int block_number, fs_ctx *fs){
+	unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
+	int byte_number = block_number / 8;
+	int bit_number = block_number % 8;
+	unsigned char bitmask = ~(1 << (7 - bit_number));
+    
+	data_bitmap[byte_number] = data_bitmap[byte_number] & bitmask;
+}
+
+/**
+ * deallocate all data blocks pointed to by the inodes extents
+ * change inode bitmap at index of the inode's number to 0
+ * 
+ * @param inode  the inode to deallocate
+ * @param fs     file system context
+**/
+void deallocate_inode(a1fs_inode inode, fs_ctx *fs){
+	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + inode.extents) * A1FS_BLOCK_SIZE;
+
+	//loop through all data blocks in all extents and deallocate the block
+	for(int i = 0; i < inode.num_extents; i++){
+		a1fs_extent extent = extents[i];
+		for(unsigned int j = extent.start; j < extent.start + extent.count; j++){
+				deallocate_block(j, fs);
+		}
+	}
+
+	unsigned char *inode_bitmap = fs->image + fs->sb->inode_bitmap * A1FS_BLOCK_SIZE;
+	int byte_number = inode.inode_number / 8;
+	int bit_number = inode.inode_number % 8;
+	unsigned char bitmask = ~(1 << (7 - bit_number));
+
+	inode_bitmap[byte_number] = inode_bitmap[byte_number] & bitmask;
+
+}
 
 /**
  * Remove a directory.
@@ -439,8 +480,13 @@ static int a1fs_rmdir(const char *path)
 	fs_ctx *fs = get_fs();
 
 	//TODO: remove the directory at given path (only if it's empty)
-	(void)path;
-	(void)fs;
+	a1fs_inode directory;
+	path_lookup(path, &directory, fs);
+
+	if(directory.size > 0) return -ENOTEMPTY;
+
+	deallocate_inode(directory, fs);
+	
 	return -ENOSYS;
 }
 
