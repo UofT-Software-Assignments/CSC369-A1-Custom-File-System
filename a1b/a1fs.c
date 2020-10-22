@@ -22,6 +22,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <time.h>
+#include <libgen.h>
 
 // Using 2.9.x FUSE API
 #define FUSE_USE_VERSION 29
@@ -372,6 +373,20 @@ int allocate_inode(fs_ctx *fs, int *inode_number){
 }
 
 /**
+ * Traverses path and splits the last file/directory and the parent directory
+ * 
+ * @param path 			full path to file/directory
+ * @param parent_path 	path to parent directory
+ * @param filename		name of file/directory
+ * @return int 0 on success, -1 on error
+ */
+void path_split(const char *path, char *parent_path, char *filename){
+	strcpy(parent_path, path);
+	filename = basename(parent_path);
+	*(filename - 1) = '\0';
+}
+
+/**
  * Create a directory.
  *
  * Implements the mkdir() system call.
@@ -399,8 +414,30 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 		return -ENOSPC;
 	}
 
-	a1fs_inode parent_dir;
-	path_lookup(path, &parent_dir, fs);
+	// extract file name and path to parent
+	// int path_length = strlen(path);
+
+	// int i = path_length-1;
+	// int found = 0;
+	// while (i > 0 && found == 0){
+	// 	if (path[i] == '/'){
+	// 		found = 1;
+	// 	}
+	// 	i--;
+	// }
+
+	// int name_length = path_length - i;
+	// int parent_length = path_length - name_length;
+	// char parent_path[parent_length + 1];
+	// char dir_name[name_length + 1];
+	// strncpy(parent_path, path, parent_length);
+	// parent_path[parent_length] = '\0';
+	// strncpy(dir_name, path + parent_length, name_length);
+	// dir_name[name_length] = '\0';
+
+	char* parent_path = malloc(strlen(path)*sizeof(char));
+	char* filename  = malloc(strlen(path)*sizeof(char));
+	path_split(path, parent_path, filename);
 
 	//allocate inode in bitmap, get inode number from this
 	//no data blocks allocated since directory is empty
@@ -409,6 +446,15 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	if ((allocate_inode(fs, &inode_number)) != 0){
 		return -ENOSPC;
 	}
+
+	a1fs_inode parent_dir;
+	path_lookup(parent_path, &parent_dir, fs);
+	a1fs_dentry dir_entry;
+	dir_entry.ino = inode_number;
+	strncpy(dir_entry.name, filename, strlen(filename));
+	dir_entry.name[strlen(dir_entry.name)-1] = '\0';
+	//TODO: insert this entry into the parent
+	
 	// Create the directory only if there exists an available slot
 	a1fs_inode *directory = fs->image + (fs->sb->inode_table + inode_number) * sizeof(a1fs_inode);
 	directory->inode_number = inode_number;
@@ -421,10 +467,6 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	directory->num_extents = 0;
 	uint32_t empty_extents_ptr = 0;
 	directory->extents = empty_extents_ptr;
-	uint8_t pad = 0;
-	for (int i = 0; i < 18; i++){
-		directory->padding[i] = pad;
-	}
 
 	return -ENOSYS;
 }
