@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <time.h>
 
 // Using 2.9.x FUSE API
 #define FUSE_USE_VERSION 29
@@ -519,7 +520,21 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	(void)path;
 	(void)mode;
 	(void)fs;
-	return -ENOSYS;
+	int error, inode_number;
+	if((error = allocate_inode(fs, &inode_number)) != 0) return error;
+
+	a1fs_inode *inode = fs->image + fs->sb->inode_table * A1FS_BLOCK_SIZE 
+						+ inode_number * sizeof(a1fs_inode);
+	
+	inode->mode = mode;
+	inode->links = 1;
+	inode->size = 0;
+	clock_gettime(CLOCK_REALTIME, &(inode->mtime));
+	inode->inode_number = inode_number;
+	inode->num_extents = 0;
+	inode->extents = -1;
+
+	return 0;
 }
 
 /**
