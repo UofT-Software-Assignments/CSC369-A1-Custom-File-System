@@ -152,8 +152,8 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 	//initialize free_inodes_count to inodes_count - 1 for root directory
 	unsigned int free_inodes_count = inodes_count - 1;
 
-	//initialize free_blocks_count
-	unsigned int free_blocks_count = blocks_count - resv_blocks_count - 1;
+	//initialize free_blocks_count to blocks_count - reserved blocks
+	unsigned int free_blocks_count = blocks_count - resv_blocks_count;
 
 	//initialize pointers
 

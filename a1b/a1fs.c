@@ -327,12 +327,27 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 
 }
 
-
-int first_free_bit(unsigned char *bitmap, int num_bits){
+/**
+ * search the given bitmap for an extent of length length
+ * 
+ * populate the extent struct given with the first extent found of length length, or,
+ * if none exist, the extent of longest length
+ * 
+ * @param bitmap    pointer to the start of the bitmap
+ * @param num_bits  the number of bits belonging ot the bitmap
+ * @param length    the length of the extent we are searching for
+ * @param extent    extent struct to populate 
+ * @return          0 on success, -1 on error e.g no space
+ */
+int search_bitmap(unsigned char *bitmap, int num_bits, unsigned int length, a1fs_extent *extent){
 	int num_bytes = num_bits / 8;
-	int bits_iterated = 0;
-	int remaining_bits = 8;
+	int bits_iterated= 0;
+	unsigned int start = 0;
+	unsigned int count = 0;
 	int i = 0;
+	int remaining_bits = 0;
+	extent->count = 0;
+
 	while (i < num_bytes + 1){
 		// the 8 bits that we are iterating
 		unsigned char current_byte = bitmap[i];
@@ -346,17 +361,32 @@ int first_free_bit(unsigned char *bitmap, int num_bits){
 		
 		// iterate through each bit to see if an inode is free
 		for (int n = 0; n < remaining_bits; n++){
-			if (!(current_byte & (1 << n))){
-				return bits_iterated + n;
+			if (!(current_byte & (1 << (7 - n)))){
+				if(count == 0){
+					start = bits_iterated + n;
+				}
+				count++;
+
+				if(count == length){
+					extent->start = start;
+					extent->count = count;
+					return 0;
+				}
+			}else{
+				if(count > extent->count){
+					extent->start = start;
+					extent->count = count;
+				} 
+				count = 0;
 			}
 		}
 		// increase the counter for number of bits iterated
 		bits_iterated += remaining_bits;
 		i++;
 	}
-	return -1;
+	if(extent->count == 0) return -1;
+	return 0;
 }
-
 /**
  * Traverses the inode_bitmap and allocate the first available inode
  * return 0 on success, return -1 on error
@@ -368,7 +398,7 @@ int first_free_bit(unsigned char *bitmap, int num_bits){
 int allocate_inode(fs_ctx *fs, int *inode_number){
     unsigned char *inode_bitmap = fs->image + (fs->sb->inode_bitmap) * A1FS_BLOCK_SIZE;
 
-	int free_inode_index = first_free_bit(inode_bitmap, fs->sb->inodes_count);
+	int free_inode_index = search_bitmap(inode_bitmap, fs->sb->inodes_count, 1, NULL);
 	if(free_inode_index == -1) return -1;
 
 	*inode_number = free_inode_index;
