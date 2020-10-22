@@ -409,51 +409,11 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	mode = mode | S_IFDIR;
 	fs_ctx *fs = get_fs();
 
-	//TODO: create a directory at given path with given mode	
-	if(!fs->sb->free_inodes_count || !(fs->sb->free_blocks_count - 1)){
-		return -ENOSPC;
-	}
-
-	// extract file name and path to parent
-	// int path_length = strlen(path);
-
-	// int i = path_length-1;
-	// int found = 0;
-	// while (i > 0 && found == 0){
-	// 	if (path[i] == '/'){
-	// 		found = 1;
-	// 	}
-	// 	i--;
-	// }
-
-	// int name_length = path_length - i;
-	// int parent_length = path_length - name_length;
-	// char parent_path[parent_length + 1];
-	// char dir_name[name_length + 1];
-	// strncpy(parent_path, path, parent_length);
-	// parent_path[parent_length] = '\0';
-	// strncpy(dir_name, path + parent_length, name_length);
-	// dir_name[name_length] = '\0';
-
-	char* parent_path = malloc(strlen(path)*sizeof(char));
-	char* filename  = malloc(strlen(path)*sizeof(char));
-	path_split(path, parent_path, filename);
-
-	//allocate inode in bitmap, get inode number from this
-	//no data blocks allocated since directory is empty
-
+	//TODO: create a directory at given path with given mode
 	int inode_number;
 	if ((allocate_inode(fs, &inode_number)) != 0){
 		return -ENOSPC;
 	}
-
-	a1fs_inode parent_dir;
-	path_lookup(parent_path, &parent_dir, fs);
-	a1fs_dentry dir_entry;
-	dir_entry.ino = inode_number;
-	strncpy(dir_entry.name, filename, strlen(filename));
-	dir_entry.name[strlen(dir_entry.name)-1] = '\0';
-	//TODO: insert this entry into the parent
 	
 	// Create the directory only if there exists an available slot
 	a1fs_inode *directory = fs->image + (fs->sb->inode_table + inode_number) * sizeof(a1fs_inode);
@@ -467,6 +427,22 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	directory->num_extents = 0;
 	uint32_t empty_extents_ptr = 0;
 	directory->extents = empty_extents_ptr;
+
+	char pathstring[A1FS_PATH_MAX];
+	strcpy(pathstring, path);
+
+	char *filename = basename(pathstring);
+	char *parent_path = dirname(pathstring);
+
+	(void)filename;
+
+	a1fs_inode parent_dir;
+	path_lookup((const char *)(parent_path), &parent_dir, fs);
+
+	//allocate inode in bitmap, get inode number from this
+	//no data blocks allocated since directory is empty
+
+	//int inode_number = allocate_inode(fs);
 
 	return -ENOSYS;
 }
