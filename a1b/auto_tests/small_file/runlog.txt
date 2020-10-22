@@ -21,5 +21,5 @@ Traceback (most recent call last):
     create_text_file("file", text)
   File "/h/u2/csc369h/fall/pub/a1b-testing/util.py", line 87, in create_text_file
     with open(path, "w") as f:
-OSError: [Errno 38] Function not implemented: 'file'
+NotADirectoryError: [Errno 20] Not a directory: 'file'
 

@@ -23,5 +23,5 @@ Traceback (most recent call last):
     fd = self._raw_open(flags, mode)
   File "/local/packages/python-3.8/lib/python3.8/pathlib.py", line 1083, in _raw_open
     return self._accessor.open(self, flags, mode)
-OSError: [Errno 38] Function not implemented: 'file'
+NotADirectoryError: [Errno 20] Not a directory: 'file'
 
