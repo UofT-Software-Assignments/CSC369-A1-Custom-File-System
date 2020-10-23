@@ -397,19 +397,20 @@ int search_bitmap(unsigned char *bitmap, int num_bits, unsigned int length, a1fs
  */
 int allocate_inode(fs_ctx *fs, int *inode_number){
     unsigned char *inode_bitmap = fs->image + (fs->sb->inode_bitmap) * A1FS_BLOCK_SIZE;
+	a1fs_extent extent;
 
-	int free_inode_index = search_bitmap(inode_bitmap, fs->sb->inodes_count, 1, NULL);
-	if(free_inode_index == -1) return -1;
+	if(search_bitmap(inode_bitmap, fs->sb->inodes_count, 1, &extent) == -1) return -1;
 
-	*inode_number = free_inode_index;
+	*inode_number = extent.start;
 
-	int byte_number = free_inode_index / 8;
-	int bit_number_in_byte = free_inode_index % 8;
+	int byte_number = *inode_number / 8;
+	int bit_number_in_byte = *inode_number % 8;
 	inode_bitmap[byte_number] = inode_bitmap[byte_number] & (1 << bit_number_in_byte);
 
 	return 0;
 
 }
+
 a1fs_extent *get_extents(a1fs_inode *inode, fs_ctx *fs){
 	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + inode->extents) * A1FS_BLOCK_SIZE;
 	return extents;
@@ -420,16 +421,26 @@ a1fs_extent *get_extents(a1fs_inode *inode, fs_ctx *fs){
  * @param inode      pointer to inode to allocate space for
  * @param num_bytes  number of bytes to allocate
  * @param fs         file system context
+ * @return           0 on success, -ENOSPC if not enough space available
 **/
 int allocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 
 	if(num_blocks > (int)fs->sb->free_blocks_count){
 		return -ENOSPC;
 	}
-	(void)inode;
-	//memcpy(get_extents(inode, fs) + inode->num_extents, extent, sizeof(a1fs_extent));
 
-	return -1;
+	unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
+	a1fs_extent *extents = get_extents(inode, fs);
+	a1fs_extent extent;
+
+	while(num_blocks > 0){
+		search_bitmap(data_bitmap, num_blocks, 1, &extent);
+		extents[inode->num_extents] = extent;
+		inode->num_extents++;
+		num_blocks -= extent.count;
+	}
+
+	return 0;
 }
 
 /**
