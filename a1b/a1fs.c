@@ -675,6 +675,10 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	path_lookup((const char *)(parent_path), &parent_dir, fs);
 
 	//append file to parent directory
+	//note that the only info given to the parent is relative to the inode
+	//hence the process of appending file is the same as that of a directory
+	add_dentry(parent_dir, filename, inode_number, fs);
+	
 
 	return 0;
 }
