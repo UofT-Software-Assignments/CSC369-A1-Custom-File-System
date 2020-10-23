@@ -661,9 +661,20 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	inode->extents = -1;
 
 	//split path string into parent directory and filename
+	char pathstring[A1FS_PATH_MAX];
+	strcpy(pathstring, path);
+
+	char *filename = basename(pathstring);
+	char *parent_path = dirname(pathstring);
 
 	//update parent directory with new file
 	(void)path;
+	(void)filename;	//avoid compiler error
+
+	a1fs_inode *parent_dir;
+	path_lookup((const char *)(parent_path), &parent_dir, fs);
+
+	//append file to parent directory
 
 	return 0;
 }
