@@ -1,2 +1,2 @@
 Root Directory: []
-Elapsed time: 0.19887026003561914 seconds
+Elapsed time: 0.1729210140183568 seconds

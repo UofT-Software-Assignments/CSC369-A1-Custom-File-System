@@ -13,24 +13,21 @@ max_readahead=0x00020000
    max_background=0
    congestion_threshold=0
    unique: 1, success, outsize: 40
-unique: 2, opcode: GETATTR (3), nodeid: 1, insize: 56, pid: 48395
+unique: 2, opcode: GETATTR (3), nodeid: 1, insize: 56, pid: 58073
 getattr /
    unique: 2, success, outsize: 120
-unique: 3, opcode: ACCESS (34), nodeid: 1, insize: 48, pid: 41564
+unique: 3, opcode: ACCESS (34), nodeid: 1, insize: 48, pid: 51241
    unique: 3, error: -38 (Function not implemented), outsize: 16
-unique: 4, opcode: STATFS (17), nodeid: 1, insize: 40, pid: 48397
+unique: 4, opcode: STATFS (17), nodeid: 1, insize: 40, pid: 58075
 statfs /
    unique: 4, success, outsize: 96
-unique: 5, opcode: LOOKUP (1), nodeid: 1, insize: 45, pid: 48397
+unique: 5, opcode: LOOKUP (1), nodeid: 1, insize: 45, pid: 58075
 LOOKUP /file
 getattr /file
    unique: 5, error: -2 (No such file or directory), outsize: 16
-unique: 6, opcode: LOOKUP (1), nodeid: 1, insize: 45, pid: 48397
+unique: 6, opcode: LOOKUP (1), nodeid: 1, insize: 45, pid: 58075
 LOOKUP /file
 getattr /file
    unique: 6, error: -2 (No such file or directory), outsize: 16
-unique: 7, opcode: CREATE (35), nodeid: 1, insize: 61, pid: 48397
+unique: 7, opcode: CREATE (35), nodeid: 1, insize: 61, pid: 58075
 create flags: 0x8041 /file 0100644 umask=0022
-   create[0] flags: 0x8041 /file
-getattr /file
-   unique: 7, error: -20 (Not a directory), outsize: 16
