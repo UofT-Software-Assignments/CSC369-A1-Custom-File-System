@@ -387,6 +387,25 @@ int search_bitmap(unsigned char *bitmap, int num_bits, unsigned int length, a1fs
 	if(extent->count == 0) return -1;
 	return 0;
 }
+
+/**
+ * switch bit bit_number to a 1 in bitmap
+**/
+void allocate_bit(unsigned char *bitmap, int bit_number){
+	int byte_number = bit_number / 8;
+	int bit_number_in_byte = bit_number % 8;
+	bitmap[byte_number] = bitmap[byte_number] & (1 << bit_number_in_byte);
+}
+
+/**
+ * switch all bits from extent start to extent start + extent count to 1
+**/
+void allocate_extent(unsigned char *bitmap, a1fs_extent *extent){
+	for(unsigned int i = extent->start; i < extent->start + extent->count; i++){
+		allocate_bit(bitmap, i);
+	}
+}
+
 /**
  * Traverses the inode_bitmap and allocate the first available inode
  * return 0 on success, return -1 on error
@@ -403,18 +422,20 @@ int allocate_inode(fs_ctx *fs, int *inode_number){
 
 	*inode_number = extent.start;
 
-	int byte_number = *inode_number / 8;
-	int bit_number_in_byte = *inode_number % 8;
-	inode_bitmap[byte_number] = inode_bitmap[byte_number] & (1 << bit_number_in_byte);
+	allocate_bit(inode_bitmap, *inode_number);
 
 	return 0;
 
 }
 
+/**
+ * return array of extents belonging to inode
+**/
 a1fs_extent *get_extents(a1fs_inode *inode, fs_ctx *fs){
 	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + inode->extents) * A1FS_BLOCK_SIZE;
 	return extents;
 }
+
 /**
  * Allocate num_blocks data blocks to inode pointed to by inode
  * 
@@ -435,6 +456,7 @@ int allocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 
 	while(num_blocks > 0){
 		search_bitmap(data_bitmap, num_blocks, 1, &extent);
+		allocate_extent(data_bitmap, &extent);
 		extents[inode->num_extents] = extent;
 		inode->num_extents++;
 		num_blocks -= extent.count;
@@ -559,18 +581,13 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 }
 
 /**
- * change data bitmap at index block_number to 0
- * 
- * @param block_number  the index of the block to deallocate
- * @param fs            file system context
+ * switch bit bit_number to a 0 in bitmap
 **/
-void deallocate_block(int block_number, fs_ctx *fs){
-	unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
-	int byte_number = block_number / 8;
-	int bit_number = block_number % 8;
-	unsigned char bitmask = ~(1 << (7 - bit_number));
-    
-	data_bitmap[byte_number] = data_bitmap[byte_number] & bitmask;
+void deallocate_bit(unsigned char *bitmap, int bit_number){
+	int byte_number = bit_number / 8;
+	int bit_number_in_byte = bit_number % 8;
+	unsigned char bitmask = ~(1 << (7 - bit_number_in_byte));
+	bitmap[byte_number] = bitmap[byte_number] & bitmask;
 }
 
 /**
@@ -581,22 +598,18 @@ void deallocate_block(int block_number, fs_ctx *fs){
  * @param fs     file system context
 **/
 void deallocate_inode(a1fs_inode *inode, fs_ctx *fs){
-	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + inode->extents) * A1FS_BLOCK_SIZE;
-
+	a1fs_extent *extents = get_extents(inode, fs);
+	unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
+	unsigned char *inode_bitmap = fs->image + fs->sb->inode_bitmap * A1FS_BLOCK_SIZE;
 	//loop through all data blocks in all extents and deallocate the block
 	for(int i = 0; i < inode->num_extents; i++){
 		a1fs_extent extent = extents[i];
 		for(unsigned int j = extent.start; j < extent.start + extent.count; j++){
-				deallocate_block(j, fs);
+				deallocate_bit(data_bitmap, j);
 		}
 	}
 
-	unsigned char *inode_bitmap = fs->image + fs->sb->inode_bitmap * A1FS_BLOCK_SIZE;
-	int byte_number = inode->inode_number / 8;
-	int bit_number = inode->inode_number % 8;
-	unsigned char bitmask = ~(1 << (7 - bit_number));
-
-	inode_bitmap[byte_number] = inode_bitmap[byte_number] & bitmask;
+	deallocate_bit(inode_bitmap, inode->inode_number);
 
 }
 
@@ -669,7 +682,6 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	clock_gettime(CLOCK_REALTIME, &(inode->mtime));
 	inode->inode_number = inode_number;
 	inode->num_extents = 0;
-	inode->extents = -1;
 
 	//split path string into parent directory and filename
 	char pathstring[A1FS_PATH_MAX];
@@ -677,10 +689,6 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
 	char *filename = basename(pathstring);
 	char *parent_path = dirname(pathstring);
-
-	//update parent directory with new file
-	(void)path;
-	(void)filename;	//avoid compiler error
 
 	a1fs_inode *parent_dir;
 	path_lookup((const char *)(parent_path), &parent_dir, fs);
