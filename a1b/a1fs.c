@@ -577,7 +577,7 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 
 	//int inode_number = allocate_inode(fs);
 
-	return -ENOSYS;
+	return 0;
 }
 
 /**
