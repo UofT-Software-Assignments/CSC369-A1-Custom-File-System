@@ -183,11 +183,15 @@ static bool mkfs(void *image, size_t size, mkfs_opts *opts)
 
 	//cast data bitmap into array of unsigned char/ array of bytes
 	unsigned char *data_bitmap_as_array = image + sb->data_bitmap * A1FS_BLOCK_SIZE;
-	data_bitmap_as_array[0] = 3 << 6; // = 1100 0000
-
-	//same for inode bitmap
 	unsigned char *inode_bitmap_as_array = image + sb->inode_bitmap * A1FS_BLOCK_SIZE;
+	memset(data_bitmap_as_array, 0, num_blocks_dmap * A1FS_BLOCK_SIZE);
+	memset(inode_bitmap_as_array, 0, num_blocks_imap * A1FS_BLOCK_SIZE);
+	
+	data_bitmap_as_array[0] = 3 << 6; // = 1100 0000
 	inode_bitmap_as_array[0] = 1 << 7; // = 1000 0000
+	
+	
+	
 
 	
 	a1fs_inode *root_inode = image + sb->inode_table * A1FS_BLOCK_SIZE;

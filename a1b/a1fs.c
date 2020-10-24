@@ -255,6 +255,7 @@ static int a1fs_getattr(const char *path, struct stat *st)
 {
 	if (strlen(path) >= A1FS_PATH_MAX) return -ENAMETOOLONG;
 	fs_ctx *fs = get_fs();
+	printf("FUCK SHIT");
 
 	memset(st, 0, sizeof(*st));
 
@@ -449,13 +450,13 @@ int allocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 	if(num_blocks > (int)fs->sb->free_blocks_count){
 		return -ENOSPC;
 	}
-
+	int num_bits_dmap = fs->sb->blocks_count - fs->sb->resv_blocks_count;
 	unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
 	a1fs_extent *extents = get_extents(inode, fs);
 	a1fs_extent extent;
 
 	while(num_blocks > 0){
-		search_bitmap(data_bitmap, num_blocks, 1, &extent);
+		search_bitmap(data_bitmap, num_bits_dmap,num_blocks, &extent);
 		allocate_extent(data_bitmap, &extent);
 		extents[inode->num_extents] = extent;
 		inode->num_extents++;
@@ -513,7 +514,7 @@ int add_dentry(a1fs_inode *directory, char *filename, int inode_number, fs_ctx *
 	a1fs_dentry *new_entry = (a1fs_dentry *)(get_front(directory, fs));
 	new_entry->ino = inode_number;
 	strcpy(new_entry->name, filename);
-	return -1;
+	return 0;
 
 
 }
@@ -559,10 +560,12 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	char pathstring[A1FS_PATH_MAX];
 	strcpy(pathstring, path);
 
-	char *filename = basename(pathstring);
-	char *parent_path = dirname(pathstring);
+	char filename[A1FS_NAME_MAX]; //have to copy like this to avoid bugs
+	strcpy(filename, basename(pathstring));
 
-	(void)filename;
+	char parent_path[A1FS_PATH_MAX];
+	strcpy(parent_path, dirname(pathstring)); 
+
 
 	a1fs_inode *parent_dir;
 	path_lookup((const char *)(parent_path), &parent_dir, fs);
@@ -577,7 +580,7 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 
 	//int inode_number = allocate_inode(fs);
 
-	return -ENOSYS;
+	return 0;
 }
 
 /**
@@ -671,7 +674,7 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
 	
 	int error, inode_number;
-	if((error = allocate_inode(fs, &inode_number)) != 0) return error;
+	if((error = allocate_inode(fs, &inode_number)) == -1) return -ENOSPC;
 
 	a1fs_inode *inode = fs->image + fs->sb->inode_table * A1FS_BLOCK_SIZE 
 						+ inode_number * sizeof(a1fs_inode);
