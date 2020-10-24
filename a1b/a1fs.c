@@ -785,6 +785,10 @@ static int a1fs_unlink(const char *path)
 	// Change metadata in parent inode
 	extents[parent_inode->num_extents-1].count -= 1;
 	parent_inode->size -= sizeof(a1fs_dentry);
+	
+	// deallocate the datablock taken up by the a1fs_dentry of last_entry
+	unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
+	deallocate_bit(data_bitmap, last_block_num);
 
 	// deallocate_inode already takes care of data_bitmap and inode_bitmap
 	deallocate_inode(inode, fs);
