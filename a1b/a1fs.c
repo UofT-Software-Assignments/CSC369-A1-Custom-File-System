@@ -255,7 +255,6 @@ static int a1fs_getattr(const char *path, struct stat *st)
 {
 	if (strlen(path) >= A1FS_PATH_MAX) return -ENAMETOOLONG;
 	fs_ctx *fs = get_fs();
-	printf("FUCK SHIT");
 
 	memset(st, 0, sizeof(*st));
 
@@ -395,7 +394,7 @@ int search_bitmap(unsigned char *bitmap, int num_bits, unsigned int length, a1fs
 void allocate_bit(unsigned char *bitmap, int bit_number){
 	int byte_number = bit_number / 8;
 	int bit_number_in_byte = bit_number % 8;
-	bitmap[byte_number] = bitmap[byte_number] & (1 << bit_number_in_byte);
+	bitmap[byte_number] = bitmap[byte_number] | (1 << bit_number_in_byte);
 }
 
 /**
