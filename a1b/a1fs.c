@@ -529,6 +529,17 @@ int add_dentry(a1fs_inode *directory, char *filename, int inode_number, fs_ctx *
 }
 
 /**
+ * fill filename with the file name specified at the end of path 
+ * and parent_path with the parent directory path
+**/
+void split_path(const char *path, char parent_path[A1FS_PATH_MAX], char filename[A1FS_NAME_MAX]){
+	char pathstring[A1FS_PATH_MAX];
+	strcpy(pathstring, path);
+	strcpy(filename, basename(pathstring));
+	strcpy(parent_path, dirname(pathstring)); 
+}
+
+/**
  * Create a directory.
  *
  * Implements the mkdir() system call.
@@ -566,31 +577,19 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	clock_gettime(CLOCK_REALTIME, &(directory->mtime));
 	directory->num_extents = 0;
 
-	char pathstring[A1FS_PATH_MAX];
-	strcpy(pathstring, path);
 
 	char filename[A1FS_NAME_MAX]; //have to copy like this to avoid bugs
-	strcpy(filename, basename(pathstring));
-
 	char parent_path[A1FS_PATH_MAX];
-	strcpy(parent_path, dirname(pathstring)); 
-
+	split_path(path, parent_path, filename);
 
 	a1fs_inode *parent_dir;
 	path_lookup((const char *)(parent_path), &parent_dir, fs);
 
-	
 	add_dentry(parent_dir, filename, inode_number, fs);
-	
-	
-
-	//allocate inode in bitmap, get inode number from this
-	//no data blocks allocated since directory is empty
-
-	//int inode_number = allocate_inode(fs);
 
 	return 0;
 }
+
 
 /**
  * switch bit bit_number to a 0 in bitmap
@@ -714,6 +713,31 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	return 0;
 }
 
+void deallocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
+	unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
+	a1fs_extent *extents = get_extents(inode, fs);
+	while(num_blocks > 0){
+		a1fs_extent *last_extent = &extents[inode->num_extents - 1];
+		if((int)last_extent->count > num_blocks){
+
+			int last_block = last_extent->start + last_extent->count - 1;
+			for(int i = 0; i < num_blocks; i++){
+				deallocate_bit(data_bitmap, last_block - i);
+			}
+			last_extent->count -= num_blocks;
+			
+		}else if((int)last_extent->count < num_blocks){
+			for(unsigned int i = last_extent->start; i < last_extent->start + last_extent->count; i++){
+				deallocate_bit(data_bitmap, i);
+			}
+			num_blocks -= last_extent->count;
+			inode->num_extents -= 1;
+			
+		}else {
+			inode->num_extents -= 1;
+		}
+	}
+}
 /**
  * Remove a file.
  *
@@ -731,27 +755,28 @@ static int a1fs_unlink(const char *path)
 {
 	fs_ctx *fs = get_fs();
 
-	//TODO: remove the file at given path
-	(void)fs;
+	//TODO: remove the file at given path	
 
-	char pathstring[A1FS_PATH_MAX];
-	strcpy(pathstring, path);
-
-	char *filename = basename(pathstring);
-	(void)filename;
-	char *parent_path = dirname(pathstring);
-
+	//deallocate file data
 	a1fs_inode *inode;
 	path_lookup(path, &inode, fs);
+	deallocate_inode(inode, fs);
+
+	char filename[A1FS_NAME_MAX];
+	char parent_path[A1FS_PATH_MAX];
+	split_path(path, parent_path, filename);
 
 	// remove link to the inode in its parent directory
 	a1fs_inode *parent_inode;
 	path_lookup((const char *)parent_path, &parent_inode, fs);
+
 	// int num_entries = parent_inode->size / sizeof(a1fs_dentry);
 	a1fs_extent *extents = get_extents(parent_inode, fs);
 	int i = 0;
 	int found = 0;
-	int entry_number = -1;
+	int entries_per_block = A1FS_BLOCK_SIZE / sizeof(a1fs_dentry);
+	a1fs_dentry *inode_entry;
+	
 	// Loop through the extents to look for the entry
 	while (i < parent_inode->num_extents && found == 0){
 		a1fs_extent extent = extents[i];
@@ -759,39 +784,43 @@ static int a1fs_unlink(const char *path)
 		// Loop through the datablocks within the current extent
 		unsigned int j = extent.start;
 		while (j < extent.start + extent.count && found == 0){
-			a1fs_dentry *entry = fs->image+(fs->sb->first_data_block + j) * A1FS_BLOCK_SIZE;
-			if (entry->ino == inode->inode_number){
-				found = 1;
-				entry_number = j;
-			} else {
-				j++;
+			a1fs_dentry *curr_block_entries = fs->image+(fs->sb->first_data_block + j) * A1FS_BLOCK_SIZE;
+			for(int k = 0; k < entries_per_block; k++){
+				if (curr_block_entries[k].ino == inode->inode_number){
+					inode_entry = &curr_block_entries[k];
+					found = 1;
+				}
 			}
 		}
-		if (found == 0){
-			i++;
-		}
+		if (found) break;
+		i++;	
 	}
-	if (found == 0){
-		//Something's messed up
-		printf("Can't find file to unlink");
+
+	//inode_entry now points to the entry we need to replace
+	a1fs_dentry *last_entry = get_front(parent_inode, fs) - sizeof(a1fs_dentry);
+    memcpy(last_entry, inode_entry, sizeof(a1fs_dentry));
+	parent_inode->size -= sizeof(a1fs_dentry);
+
+	if(parent_inode->size % A1FS_BLOCK_SIZE == 0){
+		deallocate_blocks(parent_inode, 1, fs);
 	}
+	
 	// j is the datablock number that contains the entry we want to overwrite
 	// copy the last entry to overwrite this entry.
-	unsigned int last_block_num = extents[parent_inode->num_extents-1].start + extents[parent_inode->num_extents-1].count - 1;
-	a1fs_dentry *target_entry = fs->image+(fs->sb->first_data_block + entry_number) * A1FS_BLOCK_SIZE;
-	a1fs_dentry *last_entry = fs->image+(fs->sb->first_data_block + last_block_num) * A1FS_BLOCK_SIZE;
-	memcpy(target_entry, last_entry, sizeof(a1fs_dentry));
+	//unsigned int last_block_num = extents[parent_inode->num_extents-1].start + extents[parent_inode->num_extents-1].count - 1;
+	//a1fs_dentry *target_entry = fs->image+(fs->sb->first_data_block + entry_number) * A1FS_BLOCK_SIZE;
+	//a1fs_dentry *last_entry = fs->image+(fs->sb->first_data_block + last_block_num) * A1FS_BLOCK_SIZE;
+	//memcpy(target_entry, last_entry, sizeof(a1fs_dentry));
 
 	// Change metadata in parent inode
-	extents[parent_inode->num_extents-1].count -= 1;
-	parent_inode->size -= sizeof(a1fs_dentry);
+    //	parent_inode->size -= sizeof(a1fs_dentry);
 	
 	// deallocate the datablock taken up by the a1fs_dentry of last_entry
-	unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
-	deallocate_bit(data_bitmap, last_block_num);
+	//unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
+	//deallocate_bit(data_bitmap, last_block_num);
 
 	// deallocate_inode already takes care of data_bitmap and inode_bitmap
-	deallocate_inode(inode, fs);
+	//deallocate_inode(inode, fs);
 
 	return 0;
 }
@@ -853,15 +882,31 @@ static int a1fs_utimens(const char *path, const struct timespec times[2])
 static int a1fs_truncate(const char *path, off_t size)
 {
 	fs_ctx *fs = get_fs();
-
 	//TODO: set new file size, possibly "zeroing out" the uninitialized range
-	(void)path;
-	(void)size;
-	(void)fs;
-	return -ENOSYS;
+	a1fs_inode *inode;
+	path_lookup(path, &inode, fs);
+	if((uint64_t)size > inode->size){
+		inode->size += size;
+		int leftover_space = A1FS_BLOCK_SIZE - inode->size % A1FS_BLOCK_SIZE;
+		if(leftover_space > size) return 0;
+
+		int num_blocks = round_up_divide(size - leftover_space, A1FS_BLOCK_SIZE);
+		if(allocate_blocks(inode, num_blocks, fs) == -1){
+			return -ENOSPC;
+		}
+	}
+	if((uint64_t)size < inode->size){
+		inode->size -= size;
+		int num_blocks = (size - inode->size % A1FS_BLOCK_SIZE) / A1FS_BLOCK_SIZE;
+		deallocate_blocks(inode, num_blocks, fs);
+	}
+	
+	return 0;
 }
 
-
+void *get_block(int block_number, fs_ctx *fs){
+	return fs->image + (fs->sb->first_data_block + block_number) * A1FS_BLOCK_SIZE;
+}
 /**
  * Read data from a file.
  *
@@ -890,12 +935,37 @@ static int a1fs_read(const char *path, char *buf, size_t size, off_t offset,
 	fs_ctx *fs = get_fs();
 
 	//TODO: read data from the file at given offset into the buffer
-	(void)path;
-	(void)buf;
-	(void)size;
-	(void)offset;
-	(void)fs;
-	return -ENOSYS;
+
+	a1fs_inode *inode;
+	path_lookup(path, &inode, fs);
+
+	if(offset > (int)inode->size) return 0;
+
+
+	int data_block_number = -1;
+	int block_num_in_file = round_up_divide(offset, A1FS_BLOCK_SIZE);
+	a1fs_extent *extents = get_extents(inode, fs);
+	int count = 0;
+	for(int i = 0; i < inode->num_extents; i++){
+		a1fs_extent extent = extents[i];
+		count += extent.count;
+		if(count >= block_num_in_file){
+			data_block_number = extent.start + (count - block_num_in_file);
+			break;
+		}
+	}
+
+	void *data_block = get_block(data_block_number, fs);
+	void *start_byte = data_block + offset % A1FS_BLOCK_SIZE;
+	int bytes_left_in_file = get_front(inode, fs) - start_byte - 1;
+	if(bytes_left_in_file < (int)size){
+		memcpy(buf, start_byte, bytes_left_in_file);
+		memset(buf + bytes_left_in_file, 0, size - bytes_left_in_file);
+		return bytes_left_in_file;
+	}else{
+		memcpy(buf, start_byte, size);
+		return size;
+	}
 }
 
 /**
