@@ -131,46 +131,50 @@ static int a1fs_statfs(const char *path, struct statvfs *st)
 
 	return 0;
 }
-
 /**
- * return array of directory entries contained in directory
- * NOTE: array pointer must be freed when using this function
- * 
+ * return array of extents belonging to inode
 **/
-a1fs_dentry *get_entries(a1fs_inode *directory, fs_ctx *fs){
+a1fs_extent *get_extents(a1fs_inode *inode, fs_ctx *fs){
+	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + inode->extents) * A1FS_BLOCK_SIZE;
+	return extents;
+}
 
-	a1fs_dentry *entries;
-	if((entries = malloc(directory->size)) == NULL) return NULL;
+void *get_block(int block_number, fs_ctx *fs){
+	return fs->image + (fs->sb->first_data_block + block_number) * A1FS_BLOCK_SIZE;
+}
 
-	//used to keep track of where we are copying data to in memcpy
-	void *dest = (void *)entries;
+a1fs_inode *get_inode(int inode_number, fs_ctx *fs){
+	return fs->image + fs->sb->inode_table * A1FS_BLOCK_SIZE + inode_number * sizeof(a1fs_inode);
+}
 
-	//pointer to array of extents for directory
-	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + directory->extents) * A1FS_BLOCK_SIZE;
+a1fs_dentry *get_entry(a1fs_inode *directory, char *entry_name, fs_ctx *fs){
+	a1fs_dentry *entry;
+	int entries_in_block;
 
-	//loop through extents
+	// Loop through the extents to look for the entry
+	a1fs_extent *extents = get_extents(directory, fs);
 	for(int i = 0; i < directory->num_extents; i++){
 		a1fs_extent extent = extents[i];
 		
-		//loop through data blocks in the current extent
 		for(unsigned int j = extent.start; j < extent.start + extent.count; j++){
-			//point to start of current data block
-			const void *src = fs->image + (fs->sb->first_data_block + j) * A1FS_BLOCK_SIZE;
-			
-			//if last data block, only copy whats left in directory
-			if(i == (directory->num_extents - 1) && j == (extent.start + extent.count - 1)){
-				memcpy(dest, src, directory->size % A1FS_BLOCK_SIZE);
-			} // else copy whole block
-			else{
-				memcpy(dest, src, A1FS_BLOCK_SIZE);
-			}
-			//move dest so we dont overwrite whats already copied into entries 
-			dest += A1FS_BLOCK_SIZE;
+			a1fs_dentry *curr_block_entries = get_block(j, fs);
 
-		}
+	        if(i == directory->num_extents - 1 && j == extent.start + extent.count - 1){
+				entries_in_block = directory->size % A1FS_BLOCK_SIZE / sizeof(a1fs_dentry);
+			}else{
+				entries_in_block = A1FS_BLOCK_SIZE / sizeof(a1fs_dentry);
+			}
+
+			for(int k = 0; k < entries_in_block; k++){
+				if (strcmp(curr_block_entries[k].name, entry_name) == 0){
+					entry = &curr_block_entries[k];
+					return entry;
+				}
+			}
+		
+		}	
 	}
-	return entries;
-	
+	return NULL;
 }
 
 /**
@@ -178,24 +182,10 @@ a1fs_dentry *get_entries(a1fs_inode *directory, fs_ctx *fs){
  * return 0 on success, else return -errno
 **/
 int find_entry_inode(a1fs_inode *directory, char *entry_name, int *ino, fs_ctx *fs){
-    
-	a1fs_dentry *entries;
-	if((entries = get_entries(directory, fs)) == NULL) return -ENOMEM;
-
-	int num_entries = directory->size / sizeof(a1fs_dentry);
-
-	for(int i = 0; i < num_entries; i++){
-		a1fs_dentry entry = entries[i];
-
-		if(strcmp(entry.name, entry_name) == 0){
-			free(entries);
-			*ino = entry.ino;
-			return 0;
-		}
-	}
-	free(entries);
-	return -ENOENT;
-	
+    a1fs_dentry *entry = get_entry(directory, entry_name, fs);
+	if(entry == NULL) return -ENOENT;
+	*ino = entry->ino;
+	return 0;
 }
 
 /**
@@ -278,6 +268,46 @@ static int a1fs_getattr(const char *path, struct stat *st)
 }
 
 /**
+ * return array of directory entries contained in directory
+ * NOTE: array pointer must be freed when using this function
+ * 
+**/
+a1fs_dentry *get_entries_copy(a1fs_inode *directory, fs_ctx *fs){
+
+	a1fs_dentry *entries;
+	if((entries = malloc(directory->size)) == NULL) return NULL;
+
+	//used to keep track of where we are copying data to in memcpy
+	void *dest = (void *)entries;
+
+	//pointer to array of extents for directory
+	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + directory->extents) * A1FS_BLOCK_SIZE;
+
+	//loop through extents
+	for(int i = 0; i < directory->num_extents; i++){
+		a1fs_extent extent = extents[i];
+		
+		//loop through data blocks in the current extent
+		for(unsigned int j = extent.start; j < extent.start + extent.count; j++){
+			//point to start of current data block
+			const void *src = fs->image + (fs->sb->first_data_block + j) * A1FS_BLOCK_SIZE;
+			
+			//if last data block, only copy whats left in directory
+			if(i == (directory->num_extents - 1) && j == (extent.start + extent.count - 1)){
+				memcpy(dest, src, directory->size % A1FS_BLOCK_SIZE);
+			} // else copy whole block
+			else{
+				memcpy(dest, src, A1FS_BLOCK_SIZE);
+			}
+			//move dest so we dont overwrite whats already copied into entries 
+			dest += A1FS_BLOCK_SIZE;
+
+		}
+	}
+	return entries;
+}
+
+/**
  * Read a directory.
  *
  * Implements the readdir() system call. Should call filler(buf, name, NULL, 0)
@@ -310,7 +340,7 @@ static int a1fs_readdir(const char *path, void *buf, fuse_fill_dir_t filler,
 	a1fs_inode *directory;
 	path_lookup(path, &directory, fs);
 	a1fs_dentry *entries;
-	if((entries = get_entries(directory, fs)) == NULL) return -ENOMEM;
+	if((entries = get_entries_copy(directory, fs)) == NULL) return -ENOMEM;
 
 	int num_entries = directory->size / sizeof(a1fs_dentry);
 
@@ -414,11 +444,11 @@ void allocate_extent(unsigned char *bitmap, a1fs_extent *extent){
  * @param inode_number 	index of free inode found, -1 if not found
  * @return int 0 on success, -1 on error
  */
-int allocate_inode(fs_ctx *fs, int *inode_number){
+int allocate_inode(int *inode_number, fs_ctx *fs){
     unsigned char *inode_bitmap = fs->image + (fs->sb->inode_bitmap) * A1FS_BLOCK_SIZE;
 	a1fs_extent extent;
 
-	if(search_bitmap(inode_bitmap, fs->sb->inodes_count, 1, &extent) == -1) return -1;
+	if(search_bitmap(inode_bitmap, fs->sb->inodes_count, 1, &extent) == -1) return -ENOSPC;
 
 	*inode_number = extent.start;
 
@@ -426,14 +456,6 @@ int allocate_inode(fs_ctx *fs, int *inode_number){
 
 	return 0;
 
-}
-
-/**
- * return array of extents belonging to inode
-**/
-a1fs_extent *get_extents(a1fs_inode *inode, fs_ctx *fs){
-	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + inode->extents) * A1FS_BLOCK_SIZE;
-	return extents;
 }
 
 /**
@@ -564,7 +586,7 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 
 	//TODO: create a directory at given path with given mode
 	int inode_number;
-	if ((allocate_inode(fs, &inode_number)) != 0){
+	if ((allocate_inode(&inode_number, fs)) != 0){
 		return -ENOSPC;
 	}
 	
@@ -625,7 +647,46 @@ void deallocate_inode(a1fs_inode *inode, fs_ctx *fs){
 
 }
 
+
+
+void deallocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
+	unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
+	a1fs_extent *extents = get_extents(inode, fs);
+	while(num_blocks > 0){
+		a1fs_extent *last_extent = &extents[inode->num_extents - 1];
+		if((int)last_extent->count > num_blocks){
+
+			int last_block = last_extent->start + last_extent->count - 1;
+			for(int i = 0; i < num_blocks; i++){
+				deallocate_bit(data_bitmap, last_block - i);
+			}
+			last_extent->count -= num_blocks;
+			
+		}else if((int)last_extent->count < num_blocks){
+			for(unsigned int i = last_extent->start; i < last_extent->start + last_extent->count; i++){
+				deallocate_bit(data_bitmap, i);
+			}
+			num_blocks -= last_extent->count;
+			inode->num_extents -= 1;
+			
+		}else {
+			inode->num_extents -= 1;
+		}
+	}
+}
+
+
+void remove_entry(a1fs_inode *directory, a1fs_dentry *entry, fs_ctx *fs){
+	a1fs_dentry *last_entry = get_front(directory, fs) - sizeof(a1fs_dentry);
+    memcpy(last_entry, entry, sizeof(a1fs_dentry));
+	directory->size -= sizeof(a1fs_dentry);
+
+	if(directory->size % A1FS_BLOCK_SIZE == 0){
+		deallocate_blocks(directory, 1, fs);
+	}
+}
 /**
+ * 
  * Remove a directory.
  *
  * Implements the rmdir() system call.
@@ -644,12 +705,20 @@ static int a1fs_rmdir(const char *path)
 	fs_ctx *fs = get_fs();
 
 	//TODO: remove the directory at given path (only if it's empty)
-	a1fs_inode *directory;
-	path_lookup(path, &directory, fs);
 
-	if(directory->size > 0) return -ENOTEMPTY;
+	char parent_path[A1FS_PATH_MAX];
+	char filename[A1FS_NAME_MAX];
+	split_path(path, parent_path, filename);
 
-	deallocate_inode(directory, fs);
+	a1fs_inode *parent_dir;
+	path_lookup((const char *)parent_path, &parent_dir, fs);
+
+	a1fs_dentry *dir_entry = get_entry(parent_dir, filename, fs);
+	a1fs_inode *dir_inode = get_inode(dir_entry->ino, fs);
+	if(dir_inode->size > 0) return -ENOTEMPTY;
+
+	remove_entry(parent_dir, dir_entry, fs);
+	deallocate_inode(dir_inode, fs);
 	
 	return 0;
 }
@@ -683,10 +752,9 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 
 	
 	int error, inode_number;
-	if((error = allocate_inode(fs, &inode_number)) == -1) return -ENOSPC;
+	if((error = allocate_inode(&inode_number, fs)) != 0) return error;
 
-	a1fs_inode *inode = fs->image + fs->sb->inode_table * A1FS_BLOCK_SIZE 
-						+ inode_number * sizeof(a1fs_inode);
+	a1fs_inode *inode = get_inode(inode_number, fs);
 	
 	inode->mode = mode;
 	inode->links = 1;
@@ -696,11 +764,9 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	inode->num_extents = 0;
 
 	//split path string into parent directory and filename
-	char pathstring[A1FS_PATH_MAX];
-	strcpy(pathstring, path);
-
-	char *filename = basename(pathstring);
-	char *parent_path = dirname(pathstring);
+	char filename[A1FS_NAME_MAX];
+	char parent_path[A1FS_PATH_MAX];
+	split_path(path, parent_path, filename);
 
 	a1fs_inode *parent_dir;
 	path_lookup((const char *)(parent_path), &parent_dir, fs);
@@ -710,35 +776,12 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	//hence the process of appending file is the same as that of a directory
 	add_dentry(parent_dir, filename, inode_number, fs);
 	
-
 	return 0;
 }
 
-void deallocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
-	unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
-	a1fs_extent *extents = get_extents(inode, fs);
-	while(num_blocks > 0){
-		a1fs_extent *last_extent = &extents[inode->num_extents - 1];
-		if((int)last_extent->count > num_blocks){
 
-			int last_block = last_extent->start + last_extent->count - 1;
-			for(int i = 0; i < num_blocks; i++){
-				deallocate_bit(data_bitmap, last_block - i);
-			}
-			last_extent->count -= num_blocks;
-			
-		}else if((int)last_extent->count < num_blocks){
-			for(unsigned int i = last_extent->start; i < last_extent->start + last_extent->count; i++){
-				deallocate_bit(data_bitmap, i);
-			}
-			num_blocks -= last_extent->count;
-			inode->num_extents -= 1;
-			
-		}else {
-			inode->num_extents -= 1;
-		}
-	}
-}
+
+
 /**
  * Remove a file.
  *
@@ -797,31 +840,7 @@ static int a1fs_unlink(const char *path)
 		i++;	
 	}
 
-	//inode_entry now points to the entry we need to replace
-	a1fs_dentry *last_entry = get_front(parent_inode, fs) - sizeof(a1fs_dentry);
-    memcpy(last_entry, inode_entry, sizeof(a1fs_dentry));
-	parent_inode->size -= sizeof(a1fs_dentry);
-
-	if(parent_inode->size % A1FS_BLOCK_SIZE == 0){
-		deallocate_blocks(parent_inode, 1, fs);
-	}
-	
-	// j is the datablock number that contains the entry we want to overwrite
-	// copy the last entry to overwrite this entry.
-	//unsigned int last_block_num = extents[parent_inode->num_extents-1].start + extents[parent_inode->num_extents-1].count - 1;
-	//a1fs_dentry *target_entry = fs->image+(fs->sb->first_data_block + entry_number) * A1FS_BLOCK_SIZE;
-	//a1fs_dentry *last_entry = fs->image+(fs->sb->first_data_block + last_block_num) * A1FS_BLOCK_SIZE;
-	//memcpy(target_entry, last_entry, sizeof(a1fs_dentry));
-
-	// Change metadata in parent inode
-    //	parent_inode->size -= sizeof(a1fs_dentry);
-	
-	// deallocate the datablock taken up by the a1fs_dentry of last_entry
-	//unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
-	//deallocate_bit(data_bitmap, last_block_num);
-
-	// deallocate_inode already takes care of data_bitmap and inode_bitmap
-	//deallocate_inode(inode, fs);
+	remove_entry(parent_inode, inode_entry, fs);
 
 	return 0;
 }
@@ -914,9 +933,6 @@ static int a1fs_truncate(const char *path, off_t size)
 	return 0;
 }
 
-void *get_block(int block_number, fs_ctx *fs){
-	return fs->image + (fs->sb->first_data_block + block_number) * A1FS_BLOCK_SIZE;
-}
 /**
  * Read data from a file.
  *
