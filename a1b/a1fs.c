@@ -1010,16 +1010,28 @@ static int a1fs_write(const char *path, const char *buf, size_t size,
 	// "zeroing out" the uninitialized range
 	a1fs_inode *inode;
 	path_lookup(path, &inode, fs);
+	int error;
 
 	if(offset > (int)inode->size){
-		add_bytes(inode, offset - inode->size, fs);
+		void *curr_front = get_front(inode, fs);
+		int curr_size = inode->size;
+
+		if((error = add_bytes(inode, offset - inode->size, fs)) != 0) return error;
+		
+		//set all bytes between current front of file and offset to zeroes.
+		int num_bytes_uninitialized = offset - inode->size;
+		while(num_bytes_uninitialized > 0){
+			int bytes_left_in_curr_block = A1FS_BLOCK_SIZE - curr_size % A1FS_BLOCK_SIZE;
+			memset(curr_front, 0, bytes_left_in_curr_block);
+			num_bytes_uninitialized -= bytes_left_in_curr_block;
+		}
 	}
-	(void)path;
-	(void)buf;
-	(void)size;
-	(void)offset;
-	(void)fs;
-	return -ENOSYS;
+	
+	void *offset_front = get_front(inode, fs);
+	if((error = add_bytes(inode, size, fs)) != 0) return error;
+
+	memcpy(offset_front, buf, size);
+	return size;
 }
 
 
