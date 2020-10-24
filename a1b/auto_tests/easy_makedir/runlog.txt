@@ -1,17 +1,6 @@
 Intial State:   os.statvfs_result(f_bsize=4096, f_frsize=4096, f_blocks=16, f_bfree=12, 
                 f_bavail=12, f_files=4, f_ffree=3, f_favail=3, f_flag=4102, f_namemax=252)
 Traceback (most recent call last):
-  File "/h/u2/csc369h/fall/pub/a1b-testing/submission.py", line 143, in _run
-    self.unmount(abort=timeout_exc is not None, cwd=unmount_cwd)
-  File "/h/u2/csc369h/fall/pub/a1b-testing/submission.py", line 116, in unmount
-    wait_or_kill(self.a1fs_proc, check=check, timeout=10,
-  File "/h/u2/csc369h/fall/pub/a1b-testing/util.py", line 66, in wait_or_kill
-    raise exception_chain(subprocess.CalledProcessError(ret, proc.args,
-subprocess.CalledProcessError: Command '['./a1fs', '_img_', '/tmp/_reidtest_', '-f', '-d']' died with <Signals.SIGSEGV: 11>.
-
-The above exception was the direct cause of the following exception:
-
-Traceback (most recent call last):
   File "/h/u2/csc369h/fall/pub/a1b-testing/test.py", line 25, in run_test
     test_function(submission, log)
   File "/h/u2/csc369h/fall/pub/a1b-testing/tests.py", line 240, in test
@@ -30,5 +19,5 @@ Traceback (most recent call last):
     result = self.fn(*self.args, **self.kwargs)
   File "/h/u2/csc369h/fall/pub/a1b-testing/tests.py", line 239, in fn1
     os.mkdir('dog')
-ConnectionAbortedError: [Errno 103] Software caused connection abort: 'dog'
+FileNotFoundError: [Errno 2] No such file or directory: 'dog'
 
