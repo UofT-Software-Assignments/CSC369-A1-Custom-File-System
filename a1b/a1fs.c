@@ -738,6 +738,7 @@ static int a1fs_unlink(const char *path)
 	strcpy(pathstring, path);
 
 	char *filename = basename(pathstring);
+	(void)filename;
 	char *parent_path = dirname(pathstring);
 
 	a1fs_inode *inode;
@@ -746,10 +747,11 @@ static int a1fs_unlink(const char *path)
 	// remove link to the inode in its parent directory
 	a1fs_inode *parent_inode;
 	path_lookup((const char *)parent_path, &parent_inode, fs);
-	int num_entries = parent_inode->size / sizeof(a1fs_dentry);
+	// int num_entries = parent_inode->size / sizeof(a1fs_dentry);
 	a1fs_extent *extents = get_extents(parent_inode, fs);
 	int i = 0;
 	int found = 0;
+	int entry_number = -1;
 	// Loop through the extents to look for the entry
 	while (i < parent_inode->num_extents && found == 0){
 		a1fs_extent extent = extents[i];
@@ -760,6 +762,7 @@ static int a1fs_unlink(const char *path)
 			a1fs_dentry *entry = fs->image+(fs->sb->first_data_block + j) * A1FS_BLOCK_SIZE;
 			if (entry->ino == inode->inode_number){
 				found = 1;
+				entry_number = j;
 			} else {
 				j++;
 			}
@@ -770,12 +773,12 @@ static int a1fs_unlink(const char *path)
 	}
 	if (found == 0){
 		//Something's messed up
-		printf("Can't find file to unlink")
+		printf("Can't find file to unlink");
 	}
 	// j is the datablock number that contains the entry we want to overwrite
-	// Now we copy the last entry to overwrite this entry.
-	unsigned int last_block_num = extents[parent_inode->num_extents-1].start + extents[parent_inode->num_extents-1].count - 1
-	a1fs_dentry *target_entry = fs->image+(fs->sb->first_data_block + j) * A1FS_BLOCK_SIZE;
+	// copy the last entry to overwrite this entry.
+	unsigned int last_block_num = extents[parent_inode->num_extents-1].start + extents[parent_inode->num_extents-1].count - 1;
+	a1fs_dentry *target_entry = fs->image+(fs->sb->first_data_block + entry_number) * A1FS_BLOCK_SIZE;
 	a1fs_dentry *last_entry = fs->image+(fs->sb->first_data_block + last_block_num) * A1FS_BLOCK_SIZE;
 	memcpy(target_entry, last_entry, sizeof(a1fs_dentry));
 
@@ -783,10 +786,7 @@ static int a1fs_unlink(const char *path)
 	extents[parent_inode->num_extents-1].count -= 1;
 	parent_inode->size -= sizeof(a1fs_dentry);
 
-	//TODO: remove the datablocks of the file from datablock bitmap
-
-	//TODO: remove the inode from inode bitmap.
-
+	// deallocate_inode already takes care of data_bitmap and inode_bitmap
 	deallocate_inode(inode, fs);
 
 	return 0;
