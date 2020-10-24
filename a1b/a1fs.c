@@ -220,7 +220,7 @@ int path_lookup(const char *path, a1fs_inode **result, fs_ctx *fs){
 	char *component = strtok(pathstring, "/");
 	while(component != NULL){
         a1fs_inode *directory = &(itable[inode_number]);
-		if(directory->mode != S_IFDIR) return -ENOTDIR;
+		if((directory->mode & S_IFDIR) != S_IFDIR) return -ENOTDIR;
         if((error = find_entry_inode(directory, component, &inode_number, fs)) != 0) return error;
         component = strtok(NULL, "/");
     }
@@ -483,7 +483,7 @@ int allocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 int get_last_block(a1fs_inode *inode, fs_ctx *fs){
 	a1fs_extent *extents = fs->image + (fs->sb->first_data_block + inode->extents) * A1FS_BLOCK_SIZE;
 	a1fs_extent last_extent = extents[inode->num_extents - 1];
-	int last_block = last_extent.start + last_extent.count;
+	int last_block = last_extent.start + last_extent.count - 1;
 	return last_block;
 }
 
@@ -569,7 +569,8 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	}
 	
 	// Create the directory only if there exists an available slot
-	a1fs_inode *directory = fs->image + (fs->sb->inode_table + inode_number) * sizeof(a1fs_inode);
+	a1fs_inode *itable = fs->image + fs->sb->inode_table * A1FS_BLOCK_SIZE;
+	a1fs_inode *directory = &itable[inode_number];
 	directory->inode_number = inode_number;
 	directory->mode = mode;
 	directory->links = 2;	// ".." and "."
