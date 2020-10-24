@@ -861,6 +861,23 @@ static int a1fs_utimens(const char *path, const struct timespec times[2])
 	return 0;
 }
 
+int add_bytes(a1fs_inode *inode, int num_bytes, fs_ctx *fs){
+	inode->size += num_bytes;
+	int leftover_space = A1FS_BLOCK_SIZE - inode->size % A1FS_BLOCK_SIZE;
+	if(leftover_space > num_bytes) return 0;
+
+	int num_blocks = round_up_divide(num_bytes - leftover_space, A1FS_BLOCK_SIZE);
+	if(allocate_blocks(inode, num_blocks, fs) == -1) return -ENOSPC;
+	return 0;
+}
+
+void reduce_bytes(a1fs_inode *inode, int num_bytes, fs_ctx *fs){
+	inode->size -= num_bytes;
+	int num_blocks = (num_bytes - inode->size % A1FS_BLOCK_SIZE) / A1FS_BLOCK_SIZE;
+	if(num_blocks > 0){
+		deallocate_blocks(inode, num_blocks, fs);
+	}
+}
 /**
  * Change the size of a file.
  *
@@ -886,19 +903,11 @@ static int a1fs_truncate(const char *path, off_t size)
 	a1fs_inode *inode;
 	path_lookup(path, &inode, fs);
 	if((uint64_t)size > inode->size){
-		inode->size += size;
-		int leftover_space = A1FS_BLOCK_SIZE - inode->size % A1FS_BLOCK_SIZE;
-		if(leftover_space > size) return 0;
-
-		int num_blocks = round_up_divide(size - leftover_space, A1FS_BLOCK_SIZE);
-		if(allocate_blocks(inode, num_blocks, fs) == -1){
-			return -ENOSPC;
-		}
+		int error;
+		if((error = add_bytes(inode, size, fs)) != 0) return error;
 	}
 	if((uint64_t)size < inode->size){
-		inode->size -= size;
-		int num_blocks = (size - inode->size % A1FS_BLOCK_SIZE) / A1FS_BLOCK_SIZE;
-		deallocate_blocks(inode, num_blocks, fs);
+		reduce_bytes(inode, size, fs);
 	}
 	
 	return 0;
@@ -999,6 +1008,12 @@ static int a1fs_write(const char *path, const char *buf, size_t size,
 
 	//TODO: write data from the buffer into the file at given offset, possibly
 	// "zeroing out" the uninitialized range
+	a1fs_inode *inode;
+	path_lookup(path, &inode, fs);
+
+	if(offset > (int)inode->size){
+		add_bytes(inode, offset - inode->size, fs);
+	}
 	(void)path;
 	(void)buf;
 	(void)size;
