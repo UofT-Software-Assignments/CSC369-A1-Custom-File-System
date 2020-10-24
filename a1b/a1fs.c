@@ -394,7 +394,7 @@ int search_bitmap(unsigned char *bitmap, int num_bits, unsigned int length, a1fs
 void allocate_bit(unsigned char *bitmap, int bit_number){
 	int byte_number = bit_number / 8;
 	int bit_number_in_byte = bit_number % 8;
-	bitmap[byte_number] = bitmap[byte_number] | (1 << bit_number_in_byte);
+	bitmap[byte_number] = bitmap[byte_number] | (1 << (7 - bit_number_in_byte));
 }
 
 /**
@@ -451,11 +451,20 @@ int allocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 	}
 	int num_bits_dmap = fs->sb->blocks_count - fs->sb->resv_blocks_count;
 	unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
-	a1fs_extent *extents = get_extents(inode, fs);
+
 	a1fs_extent extent;
+	
+
+	if(inode->num_extents == 0){
+		search_bitmap(data_bitmap, num_bits_dmap, 1, &extent);
+		allocate_bit(data_bitmap, extent.start);
+		inode->extents = extent.start;
+	}
+	
+	a1fs_extent *extents = get_extents(inode, fs);
 
 	while(num_blocks > 0){
-		search_bitmap(data_bitmap, num_bits_dmap,num_blocks, &extent);
+		search_bitmap(data_bitmap, num_bits_dmap, num_blocks, &extent);
 		allocate_extent(data_bitmap, &extent);
 		extents[inode->num_extents] = extent;
 		inode->num_extents++;
@@ -504,6 +513,7 @@ void *get_front(a1fs_inode *inode, fs_ctx *fs){
 **/
 int add_dentry(a1fs_inode *directory, char *filename, int inode_number, fs_ctx *fs){
 	//if directory is full, allocate new block for entry
+
 	int bytes_remainder = directory->size % A1FS_BLOCK_SIZE;
 	if(bytes_remainder == 0){
 		allocate_blocks(directory, 1, fs);
@@ -513,8 +523,8 @@ int add_dentry(a1fs_inode *directory, char *filename, int inode_number, fs_ctx *
 	a1fs_dentry *new_entry = (a1fs_dentry *)(get_front(directory, fs));
 	new_entry->ino = inode_number;
 	strcpy(new_entry->name, filename);
+	directory->size += sizeof(a1fs_dentry);
 	return 0;
-
 
 }
 
