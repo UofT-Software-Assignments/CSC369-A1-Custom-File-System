@@ -13,19 +13,56 @@ max_readahead=0x00020000
    max_background=0
    congestion_threshold=0
    unique: 1, success, outsize: 40
-unique: 2, opcode: GETATTR (3), nodeid: 1, insize: 56, pid: 48574
+unique: 2, opcode: GETATTR (3), nodeid: 1, insize: 56, pid: 41742
 getattr /
    unique: 2, success, outsize: 120
-unique: 3, opcode: ACCESS (34), nodeid: 1, insize: 48, pid: 43222
+unique: 3, opcode: ACCESS (34), nodeid: 1, insize: 48, pid: 35457
    unique: 3, error: -38 (Function not implemented), outsize: 16
-unique: 4, opcode: STATFS (17), nodeid: 1, insize: 40, pid: 48576
+unique: 4, opcode: STATFS (17), nodeid: 1, insize: 40, pid: 41744
 statfs /
    unique: 4, success, outsize: 96
-unique: 5, opcode: LOOKUP (1), nodeid: 1, insize: 44, pid: 48576
+unique: 5, opcode: LOOKUP (1), nodeid: 1, insize: 44, pid: 41744
 LOOKUP /dog
 getattr /dog
    unique: 5, error: -2 (No such file or directory), outsize: 16
-unique: 6, opcode: MKDIR (9), nodeid: 1, insize: 52, pid: 48576
+unique: 6, opcode: MKDIR (9), nodeid: 1, insize: 52, pid: 41744
 mkdir /dog 0755 umask=0022
 getattr /dog
-   unique: 6, error: -2 (No such file or directory), outsize: 16
+   NODEID: 2
+   unique: 6, success, outsize: 144
+unique: 7, opcode: GETATTR (3), nodeid: 1, insize: 56, pid: 41745
+getattr /
+   unique: 7, success, outsize: 120
+unique: 8, opcode: OPENDIR (27), nodeid: 1, insize: 48, pid: 41746
+   unique: 8, success, outsize: 32
+unique: 9, opcode: READDIR (28), nodeid: 1, insize: 80, pid: 41746
+readdir[0] from 0
+   unique: 9, success, outsize: 112
+unique: 10, opcode: READDIR (28), nodeid: 1, insize: 80, pid: 41746
+   unique: 10, success, outsize: 16
+unique: 11, opcode: RELEASEDIR (29), nodeid: 1, insize: 64, pid: 0
+   unique: 11, success, outsize: 16
+unique: 12, opcode: OPENDIR (27), nodeid: 2, insize: 48, pid: 41746
+   unique: 12, success, outsize: 32
+unique: 13, opcode: READDIR (28), nodeid: 2, insize: 80, pid: 41746
+readdir[0] from 0
+   unique: 13, success, outsize: 80
+unique: 14, opcode: READDIR (28), nodeid: 2, insize: 80, pid: 41746
+   unique: 14, success, outsize: 16
+unique: 15, opcode: RELEASEDIR (29), nodeid: 2, insize: 64, pid: 0
+   unique: 15, success, outsize: 16
+unique: 16, opcode: OPENDIR (27), nodeid: 2, insize: 48, pid: 41746
+   unique: 16, success, outsize: 32
+unique: 17, opcode: GETATTR (3), nodeid: 2, insize: 56, pid: 41746
+getattr /dog
+   unique: 17, success, outsize: 120
+unique: 18, opcode: READDIR (28), nodeid: 2, insize: 80, pid: 41746
+readdir[0] from 0
+   unique: 18, success, outsize: 80
+unique: 19, opcode: READDIR (28), nodeid: 2, insize: 80, pid: 41746
+   unique: 19, success, outsize: 16
+unique: 20, opcode: RELEASEDIR (29), nodeid: 2, insize: 64, pid: 0
+   unique: 20, success, outsize: 16
+unique: 21, opcode: STATFS (17), nodeid: 1, insize: 40, pid: 41746
+statfs /
+   unique: 21, success, outsize: 96
