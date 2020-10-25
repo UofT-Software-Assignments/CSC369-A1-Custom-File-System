@@ -199,7 +199,7 @@ int path_lookup(const char *path, a1fs_inode **result, fs_ctx *fs){
     }
 	//copy path to pathstring bc path is const;
 	char pathstring[A1FS_PATH_MAX];
-    strncpy(pathstring, path, A1FS_PATH_MAX - 1);
+    strncpy(pathstring, path, A1FS_PATH_MAX);
     pathstring[A1FS_PATH_MAX - 1] = '\0'; // null terminate
 	int inode_number = 0; //start at root inode
 	int error;
@@ -544,7 +544,7 @@ int add_dentry(a1fs_inode *directory, char *filename, int inode_number, fs_ctx *
 
 	a1fs_dentry *new_entry = (a1fs_dentry *)(get_front(directory, fs));
 	new_entry->ino = inode_number;
-	strcpy(new_entry->name, filename);
+	strncpy(new_entry->name, filename, A1FS_NAME_MAX);
 	directory->size += sizeof(a1fs_dentry);
 	return 0;
 
@@ -557,8 +557,8 @@ int add_dentry(a1fs_inode *directory, char *filename, int inode_number, fs_ctx *
 void split_path(const char *path, char parent_path[A1FS_PATH_MAX], char filename[A1FS_NAME_MAX]){
 	char pathstring[A1FS_PATH_MAX];
 	strcpy(pathstring, path);
-	strcpy(filename, basename(pathstring));
-	strcpy(parent_path, dirname(pathstring)); 
+	strncpy(filename, basename(pathstring), A1FS_NAME_MAX);
+	strncpy(parent_path, dirname(pathstring), A1FS_PATH_MAX); 
 }
 
 /**
@@ -882,11 +882,16 @@ static int a1fs_utimens(const char *path, const struct timespec times[2])
 	
 	return 0;
 }
-
+//note assumes file is initialized with at least 1 data block
 int add_bytes(a1fs_inode *inode, int num_bytes, fs_ctx *fs){
+	int leftover_space;
+	if(inode->size % A1FS_BLOCK_SIZE == 0){
+		leftover_space = 0;
+	}else{
+		leftover_space = A1FS_BLOCK_SIZE - inode->size % A1FS_BLOCK_SIZE;
+	}
 	inode->size += num_bytes;
-	int leftover_space = A1FS_BLOCK_SIZE - inode->size % A1FS_BLOCK_SIZE;
-	if(leftover_space > num_bytes) return 0;
+	if(leftover_space >= num_bytes) return 0;
 
 	int num_blocks = round_up_divide(num_bytes - leftover_space, A1FS_BLOCK_SIZE);
 	if(allocate_blocks(inode, num_blocks, fs) == -1) return -ENOSPC;
@@ -971,7 +976,7 @@ static int a1fs_read(const char *path, char *buf, size_t size, off_t offset,
 
 
 	int data_block_number = -1;
-	int block_num_in_file = round_up_divide(offset, A1FS_BLOCK_SIZE);
+	int block_num_in_file = offset ? round_up_divide(offset, A1FS_BLOCK_SIZE) : 1;
 	a1fs_extent *extents = get_extents(inode, fs);
 	int count = 0;
 	for(int i = 0; i < inode->num_extents; i++){
@@ -1029,6 +1034,12 @@ static int a1fs_write(const char *path, const char *buf, size_t size,
 	// "zeroing out" the uninitialized range
 	a1fs_inode *inode;
 	path_lookup(path, &inode, fs);
+
+	if(inode->num_extents == 0){
+		allocate_blocks(inode, 1, fs);
+	}
+
+
 	int error;
 
 	if(offset > (int)inode->size){
