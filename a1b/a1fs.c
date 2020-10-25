@@ -421,7 +421,16 @@ int search_bitmap(unsigned char *bitmap, int num_bits, unsigned int length, a1fs
 /**
  * switch bit bit_number to a 1 in bitmap
 **/
-void allocate_bit(unsigned char *bitmap, int bit_number){
+void allocate_bit(unsigned char map, int bit_number, fs_ctx *fs){
+	int map_start;
+	if(map == 'd'){
+		map_start = fs->sb->data_bitmap;
+		fs->sb->free_blocks_count--;
+	}else{
+		map_start = fs->sb->inode_bitmap;
+		fs->sb->free_inodes_count--;
+	}
+	unsigned char *bitmap = fs->image + map_start * A1FS_BLOCK_SIZE;
 	int byte_number = bit_number / 8;
 	int bit_number_in_byte = bit_number % 8;
 	bitmap[byte_number] = bitmap[byte_number] | (1 << (7 - bit_number_in_byte));
@@ -429,10 +438,11 @@ void allocate_bit(unsigned char *bitmap, int bit_number){
 
 /**
  * switch all bits from extent start to extent start + extent count to 1
+ * NOTE: assumed we are allocating to the data bitmap
 **/
-void allocate_extent(unsigned char *bitmap, a1fs_extent *extent){
+void allocate_extent(a1fs_extent *extent, fs_ctx *fs){
 	for(unsigned int i = extent->start; i < extent->start + extent->count; i++){
-		allocate_bit(bitmap, i);
+		allocate_bit('d', i, fs);
 	}
 }
 
@@ -452,7 +462,7 @@ int allocate_inode(int *inode_number, fs_ctx *fs){
 
 	*inode_number = extent.start;
 
-	allocate_bit(inode_bitmap, *inode_number);
+	allocate_bit('i', *inode_number, fs);
 
 	return 0;
 
@@ -479,7 +489,7 @@ int allocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 
 	if(inode->num_extents == 0){
 		search_bitmap(data_bitmap, num_bits_dmap, 1, &extent);
-		allocate_bit(data_bitmap, extent.start);
+		allocate_bit('d', extent.start, fs);
 		inode->extents = extent.start;
 	}
 	
@@ -487,7 +497,7 @@ int allocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 
 	while(num_blocks > 0){
 		search_bitmap(data_bitmap, num_bits_dmap, num_blocks, &extent);
-		allocate_extent(data_bitmap, &extent);
+		allocate_extent(&extent, fs);
 		extents[inode->num_extents] = extent;
 		inode->num_extents++;
 		num_blocks -= extent.count;
@@ -620,11 +630,20 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 /**
  * switch bit bit_number to a 0 in bitmap
 **/
-void deallocate_bit(unsigned char *bitmap, int bit_number){
+void deallocate_bit(unsigned char map, int bit_number, fs_ctx *fs){
+	int map_start;
+	if(map == 'd'){
+		map_start = fs->sb->data_bitmap;
+		fs->sb->free_blocks_count++;
+	}else{
+		map_start = fs->sb->inode_bitmap;
+		fs->sb->free_inodes_count++;
+	}
+	unsigned char *bitmap = fs->image + map_start * A1FS_BLOCK_SIZE; 
 	int byte_number = bit_number / 8;
 	int bit_number_in_byte = bit_number % 8;
 	unsigned char bitmask = ~(1 << (7 - bit_number_in_byte));
-	bitmap[byte_number] = bitmap[byte_number] & bitmask;
+	bitmap[byte_number] = bitmap[byte_number] & bitmask;	
 }
 
 /**
@@ -636,24 +655,21 @@ void deallocate_bit(unsigned char *bitmap, int bit_number){
 **/
 void deallocate_inode(a1fs_inode *inode, fs_ctx *fs){
 	a1fs_extent *extents = get_extents(inode, fs);
-	unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
-	unsigned char *inode_bitmap = fs->image + fs->sb->inode_bitmap * A1FS_BLOCK_SIZE;
 	//loop through all data blocks in all extents and deallocate the block
 	for(int i = 0; i < inode->num_extents; i++){
 		a1fs_extent extent = extents[i];
 		for(unsigned int j = extent.start; j < extent.start + extent.count; j++){
-				deallocate_bit(data_bitmap, j);
+				deallocate_bit('d', j, fs);
 		}
 	}
 
-	deallocate_bit(inode_bitmap, inode->inode_number);
+	deallocate_bit('i', inode->inode_number, fs);
 
 }
 
 
 
 void deallocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
-	unsigned char *data_bitmap = fs->image + fs->sb->data_bitmap * A1FS_BLOCK_SIZE;
 	a1fs_extent *extents = get_extents(inode, fs);
 	while(num_blocks > 0){
 		a1fs_extent *last_extent = &extents[inode->num_extents - 1];
@@ -661,14 +677,14 @@ void deallocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 
 			int last_block = last_extent->start + last_extent->count - 1;
 			for(int i = 0; i < num_blocks; i++){
-				deallocate_bit(data_bitmap, last_block - i);
+				deallocate_bit('d', last_block - i, fs);
 			}
 			last_extent->count -= num_blocks;
 			num_blocks = 0;
 			
 		}else if((int)last_extent->count < num_blocks){
 			for(unsigned int i = last_extent->start; i < last_extent->start + last_extent->count; i++){
-				deallocate_bit(data_bitmap, i);
+				deallocate_bit('d', i, fs);
 			}
 			num_blocks -= last_extent->count;
 			inode->num_extents -= 1;
