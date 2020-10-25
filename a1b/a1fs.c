@@ -518,6 +518,9 @@ int get_last_block(a1fs_inode *inode, fs_ctx *fs){
  * @param fs     file system context
 **/
 void *get_front(a1fs_inode *inode, fs_ctx *fs){
+	if(inode->num_extents == 0){
+		allocate_blocks(inode, 1, fs);
+	}
 	int last_block = get_last_block(inode, fs);
 	void *front = fs->image + (fs->sb->first_data_block + last_block) * A1FS_BLOCK_SIZE 
 						+ inode->size % A1FS_BLOCK_SIZE;
@@ -680,7 +683,7 @@ void deallocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 
 void remove_entry(a1fs_inode *directory, a1fs_dentry *entry, fs_ctx *fs){
 	a1fs_dentry *last_entry = get_front(directory, fs) - sizeof(a1fs_dentry);
-    memcpy(last_entry, entry, sizeof(a1fs_dentry));
+    memcpy(entry, last_entry, sizeof(a1fs_dentry));
 	directory->size -= sizeof(a1fs_dentry);
 
 	if(directory->size % A1FS_BLOCK_SIZE == 0){
@@ -804,45 +807,21 @@ static int a1fs_unlink(const char *path)
 	//TODO: remove the file at given path	
 
 	//deallocate file data
-	a1fs_inode *inode;
-	path_lookup(path, &inode, fs);
-	deallocate_inode(inode, fs);
 
 	char filename[A1FS_NAME_MAX];
 	char parent_path[A1FS_PATH_MAX];
 	split_path(path, parent_path, filename);
 
 	// remove link to the inode in its parent directory
-	a1fs_inode *parent_inode;
-	path_lookup((const char *)parent_path, &parent_inode, fs);
+	a1fs_inode *parent_dir;
+	path_lookup((const char *)parent_path, &parent_dir, fs);
 
 	// int num_entries = parent_inode->size / sizeof(a1fs_dentry);
-	a1fs_extent *extents = get_extents(parent_inode, fs);
-	int i = 0;
-	int found = 0;
-	int entries_per_block = A1FS_BLOCK_SIZE / sizeof(a1fs_dentry);
-	a1fs_dentry *inode_entry;
-	
-	// Loop through the extents to look for the entry
-	while (i < parent_inode->num_extents && found == 0){
-		a1fs_extent extent = extents[i];
-		
-		// Loop through the datablocks within the current extent
-		unsigned int j = extent.start;
-		while (j < extent.start + extent.count && found == 0){
-			a1fs_dentry *curr_block_entries = fs->image+(fs->sb->first_data_block + j) * A1FS_BLOCK_SIZE;
-			for(int k = 0; k < entries_per_block; k++){
-				if (curr_block_entries[k].ino == inode->inode_number){
-					inode_entry = &curr_block_entries[k];
-					found = 1;
-				}
-			}
-		}
-		if (found) break;
-		i++;	
-	}
+	a1fs_dentry *inode_entry = get_entry(parent_dir, filename, fs);
+	a1fs_inode *inode = get_inode(inode_entry->ino, fs);
 
-	remove_entry(parent_inode, inode_entry, fs);
+	deallocate_inode(inode, fs);
+	remove_entry(parent_dir, inode_entry, fs);
 
 	return 0;
 }
@@ -974,7 +953,8 @@ static int a1fs_read(const char *path, char *buf, size_t size, off_t offset,
 
 	if(offset > (int)inode->size) return 0;
 
-
+	//can make this helper to find byte in file
+	//============================================
 	int data_block_number = -1;
 	int block_num_in_file = offset ? round_up_divide(offset, A1FS_BLOCK_SIZE) : 1;
 	a1fs_extent *extents = get_extents(inode, fs);
@@ -990,6 +970,7 @@ static int a1fs_read(const char *path, char *buf, size_t size, off_t offset,
 
 	void *data_block = get_block(data_block_number, fs);
 	void *start_byte = data_block + offset % A1FS_BLOCK_SIZE;
+	//=====================================================
 	int bytes_left_in_file = get_front(inode, fs) - start_byte - 1;
 	if(bytes_left_in_file < (int)size){
 		memcpy(buf, start_byte, bytes_left_in_file);
@@ -1034,10 +1015,6 @@ static int a1fs_write(const char *path, const char *buf, size_t size,
 	// "zeroing out" the uninitialized range
 	a1fs_inode *inode;
 	path_lookup(path, &inode, fs);
-
-	if(inode->num_extents == 0){
-		allocate_blocks(inode, 1, fs);
-	}
 
 
 	int error;
