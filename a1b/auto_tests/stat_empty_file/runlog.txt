@@ -1,27 +1,6 @@
 Intial State:   os.statvfs_result(f_bsize=4096, f_frsize=4096, f_blocks=16, f_bfree=12, 
                 f_bavail=12, f_files=16, f_ffree=15, f_favail=15, f_flag=4102, f_namemax=252)
-Traceback (most recent call last):
-  File "/h/u2/csc369h/fall/pub/a1b-testing/test.py", line 25, in run_test
-    test_function(submission, log)
-  File "/h/u2/csc369h/fall/pub/a1b-testing/tests.py", line 403, in test
-    s.run(fn, timeout=5)
-  File "/h/u2/csc369h/fall/pub/a1b-testing/submission.py", line 207, in run
-    return self._run(timeout, cwd, fn, *args, **kwargs)
-  File "/h/u2/csc369h/fall/pub/a1b-testing/submission.py", line 148, in _run
-    raise exception_chain(fn_exc, a1fs_exc, timeout_exc)
-  File "/h/u2/csc369h/fall/pub/a1b-testing/submission.py", line 136, in _run
-    return future.result(timeout)
-  File "/local/packages/python-3.8/lib/python3.8/concurrent/futures/_base.py", line 439, in result
-    return self.__get_result()
-  File "/local/packages/python-3.8/lib/python3.8/concurrent/futures/_base.py", line 388, in __get_result
-    raise self._exception
-  File "/local/packages/python-3.8/lib/python3.8/concurrent/futures/thread.py", line 57, in run
-    result = self.fn(*self.args, **self.kwargs)
-  File "/h/u2/csc369h/fall/pub/a1b-testing/tests.py", line 398, in fn
-    Path("file").touch()
-  File "/local/packages/python-3.8/lib/python3.8/pathlib.py", line 1274, in touch
-    fd = self._raw_open(flags, mode)
-  File "/local/packages/python-3.8/lib/python3.8/pathlib.py", line 1083, in _raw_open
-    return self._accessor.open(self, flags, mode)
-FileNotFoundError: [Errno 2] No such file or directory: 'file'
-
+Stat "file": os.stat_result(st_mode=33188, st_ino=2, st_dev=61, st_nlink=1, st_uid=0, st_gid=0, st_size=0, st_atime=0, st_mtime=1603658755, st_ctime=0) [Type: Dir]
+Final State:    os.statvfs_result(f_bsize=4096, f_frsize=4096, f_blocks=16, f_bfree=10, 
+                f_bavail=10, f_files=16, f_ffree=14, f_favail=14, f_flag=4102, f_namemax=252)
+Elapsed time: 0.2559591270983219 seconds
