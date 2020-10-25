@@ -661,6 +661,7 @@ void deallocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 				deallocate_bit(data_bitmap, last_block - i);
 			}
 			last_extent->count -= num_blocks;
+			num_blocks = 0;
 			
 		}else if((int)last_extent->count < num_blocks){
 			for(unsigned int i = last_extent->start; i < last_extent->start + last_extent->count; i++){
@@ -671,6 +672,7 @@ void deallocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 			
 		}else {
 			inode->num_extents -= 1;
+			num_blocks = 0;
 		}
 	}
 }
