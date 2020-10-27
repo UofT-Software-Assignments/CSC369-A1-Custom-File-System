@@ -1,0 +1,6 @@
+*.o
+*.d
+mkfs.a1fs
+run_test.sh
+a1fs
+image

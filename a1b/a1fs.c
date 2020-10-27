@@ -548,7 +548,7 @@ void *get_front(a1fs_inode *inode, fs_ctx *fs){
  * @param inode_number  inode number of the inode pointed to by the new entry
  * @param fs            file system context
 **/
-int add_dentry(a1fs_inode *directory, char *filename, int inode_number, fs_ctx *fs){
+int add_dentry(a1fs_inode *directory, char *filename, a1fs_inode *inode, fs_ctx *fs){
 	//if directory is full, allocate new block for entry
 
 	int bytes_remainder = directory->size % A1FS_BLOCK_SIZE;
@@ -558,10 +558,10 @@ int add_dentry(a1fs_inode *directory, char *filename, int inode_number, fs_ctx *
 	//otherwise add entry to last data block
 
 	a1fs_dentry *new_entry = (a1fs_dentry *)(get_front(directory, fs));
-	new_entry->ino = inode_number;
+	new_entry->ino = inode->inode_number;
 	strncpy(new_entry->name, filename, A1FS_NAME_MAX);
 	directory->size += sizeof(a1fs_dentry);
-	directory->links++;
+	if((inode->mode & S_IFDIR) == S_IFDIR) directory->links++;
 	return 0;
 
 }
@@ -624,7 +624,7 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	a1fs_inode *parent_dir;
 	path_lookup((const char *)(parent_path), &parent_dir, fs);
 
-	add_dentry(parent_dir, filename, inode_number, fs);
+	add_dentry(parent_dir, filename, directory, fs);
 
 	return 0;
 }
@@ -798,7 +798,7 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	//append file to parent directory
 	//note that the only info given to the parent is relative to the inode
 	//hence the process of appending file is the same as that of a directory
-	add_dentry(parent_dir, filename, inode_number, fs);
+	add_dentry(parent_dir, filename, inode, fs);
 	
 	return 0;
 }
