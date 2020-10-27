@@ -433,7 +433,8 @@ void allocate_bit(unsigned char map, int bit_number, fs_ctx *fs){
 	unsigned char *bitmap = fs->image + map_start * A1FS_BLOCK_SIZE;
 	int byte_number = bit_number / 8;
 	int bit_number_in_byte = bit_number % 8;
-	bitmap[byte_number] = bitmap[byte_number] | (1 << (7 - bit_number_in_byte));
+	unsigned char bitmask = (1 << (7 - bit_number_in_byte));
+	bitmap[byte_number] = bitmap[byte_number] | bitmask;
 }
 
 /**
@@ -478,7 +479,7 @@ int allocate_inode(int *inode_number, fs_ctx *fs){
 **/
 int allocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 
-	if(num_blocks > (int)fs->sb->free_blocks_count){
+	if(num_blocks > (int)fs->sb->free_blocks_count || inode->num_extents == A1FS_BLOCK_SIZE / sizeof(a1fs_extent)){
 		return -ENOSPC;
 	}
 	int num_bits_dmap = fs->sb->blocks_count - fs->sb->resv_blocks_count;
@@ -491,6 +492,7 @@ int allocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 		search_bitmap(data_bitmap, num_bits_dmap, 1, &extent);
 		allocate_bit('d', extent.start, fs);
 		inode->extents = extent.start;
+		
 	}
 	
 	a1fs_extent *extents = get_extents(inode, fs);
