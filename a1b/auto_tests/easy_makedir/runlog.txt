@@ -4,4 +4,4 @@ Root Directory: ['dog']
 dog Directory: []
 Final State:    os.statvfs_result(f_bsize=4096, f_frsize=4096, f_blocks=16, f_bfree=10, 
                 f_bavail=10, f_files=4, f_ffree=2, f_favail=2, f_flag=4102, f_namemax=252)
-Elapsed time: 0.5920321601442993 seconds
+Elapsed time: 0.49603515211492777 seconds

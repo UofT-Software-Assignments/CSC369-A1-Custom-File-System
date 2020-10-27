@@ -13,7 +13,7 @@ max_readahead=0x00020000
    max_background=0
    congestion_threshold=0
    unique: 1, success, outsize: 40
-unique: 2, opcode: GETATTR (3), nodeid: 1, insize: 56, pid: 29828
+unique: 2, opcode: GETATTR (3), nodeid: 1, insize: 56, pid: 37261
 getattr /
    unique: 2, success, outsize: 120
 FUSE library version: 2.9.7
@@ -31,6 +31,6 @@ max_readahead=0x00020000
    max_background=0
    congestion_threshold=0
    unique: 1, success, outsize: 40
-unique: 2, opcode: GETATTR (3), nodeid: 1, insize: 56, pid: 29836
+unique: 2, opcode: GETATTR (3), nodeid: 1, insize: 56, pid: 37269
 getattr /
    unique: 2, success, outsize: 120
