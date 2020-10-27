@@ -1,52 +1,76 @@
-# We expect the script to be ran in the working repository
-# make needs to be called before the script is called
-# we also assumed /tmp/chaohao1 is an available directory that exists.
-#
-# Creating an image and mounting the file system
-truncate -s 64K disk_image
-./mkfs.a1fs -i 16 disk_image
-./a1fs disk_image /tmp/chaohao1
+# constants 
+root="/tmp/myrskogr"
+image="disk_image"
+image_size=64K
+inodes=16
+
+# Assumptions
+# we assume the  script is ran in the working repository
+# We assume that root is an existing empty directory
+
+#prepare root and image
+fusermount -u ${root}
+truncate -s ${image_size} ${image}
+
+# format and mount fs image
+make
+./mkfs.a1fs -f -i ${inodes} ${image}
+./a1fs ${image} ${root}
+
 # creating a simple directory
-mkdir /tmp/chaohao1/dir1
-ls /tmp/chaohao1
+mkdir ${root}/dir1
+ls ${root}
+
 # create a file and append some content to it
-touch /tmp/chaohao1/dir1/file1
-echo "random content" >> /tmp/chaohao1/dir1/file1
-ls /tmp/chaohao1/dir1
+touch ${root}/dir1/file1
+echo "file1 content" >> ${root}/dir1/file1
+ls ${root}/dir1
+
 # make another file with some content
-echo "another file" > /tmp/chaohao1/dir1/file2
-ls /tmp/chaohao1/dir1
+echo "another file" > ${root}/dir1/file2
+ls ${root}/dir1
+
 # make another directory
-mkdir /tmp/chaohao1/dir1/another_directory
-ls /tmp/chaohao1/dir1
+mkdir ${root}/dir1/another_directory
+ls ${root}/dir1
+
 # printing contents of the files
-cat /tmp/chaohao1/dir1/file1
-cat /tmp/chaohao1/dir1/file2
+cat ${root}/dir1/file1
+cat ${root}/dir1/file2
+
 # remove a file
-unlink /tmp/chaohao1/dir1/file2
-ls /tmp/chaohao1/dir1
+unlink ${root}/dir1/file2
+ls ${root}/dir1
+
 # appending more content to a file
-echo "add more content" >> /tmp/chaohao1/dir1/file1
-cat /tmp/chaohao1/dir1/file1
-ls /tmp/chaohao1/dir1
+echo "file1 added content" >> ${root}/dir1/file1
+cat ${root}/dir1/file1
+ls ${root}/dir1
+
 # removing a directory
-rmdir /tmp/chaohao1/dir1/another_directory
-ls /tmp/chaohao1/dir1
+rmdir ${root}/dir1/another_directory
+ls ${root}/dir1
+
 # making a new directory
-mkdir /tmp/chaohao1/dir1/a_new_dir
-ls /tmp/chaohao1/dir1
+mkdir ${root}/dir1/a_new_dir
+ls ${root}/dir1
+
 # making a new file
-echo "a new file2" > /tmp/chaohao1/dir1/file2
-ls /tmp/chaohao1/dir1
+echo "file2 contents" > ${root}/dir1/file2
+ls ${root}/dir1
+
 # unmount the file system
-fusermount -u /tmp/chaohao1
+fusermount -u ${root}
+
 # remount the file system
-./a1fs disk_image /tmp/chaohao1
+./a1fs ${image} ${root}
+
 # check the contents of the file system
-ls /tmp/chaohao1
-ls /tmp/chaohao1/dir1
-cat /tmp/chaohao1/dir1/file1
-cat /tmp/chaohao1/dir1/a_new_dir
-cat /tmp/chaohao1/dir1/file2
+ls ${root}
+ls ${root}/dir1
+cat ${root}/dir1/file1
+cat ${root}/dir1/a_new_dir
+cat ${root}/dir1/file2
+
 # unmount the file system
-fusermount -u /tmp/chaohao1
+fusermount -u ${root}
