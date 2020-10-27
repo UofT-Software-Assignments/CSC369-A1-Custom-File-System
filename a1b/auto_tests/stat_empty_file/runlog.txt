@@ -1,6 +1,6 @@
 Intial State:   os.statvfs_result(f_bsize=4096, f_frsize=4096, f_blocks=16, f_bfree=12, 
                 f_bavail=12, f_files=16, f_ffree=15, f_favail=15, f_flag=4102, f_namemax=252)
-Stat "file": os.stat_result(st_mode=33188, st_ino=2, st_dev=1048613, st_nlink=1, st_uid=0, st_gid=0, st_size=0, st_atime=0, st_mtime=1603807223, st_ctime=0) [Type: Dir]
+Stat "file": os.stat_result(st_mode=33188, st_ino=2, st_dev=1048690, st_nlink=1, st_uid=0, st_gid=0, st_size=0, st_atime=0, st_mtime=1603829730, st_ctime=0) [Type: Dir]
 Final State:    os.statvfs_result(f_bsize=4096, f_frsize=4096, f_blocks=16, f_bfree=10, 
                 f_bavail=10, f_files=16, f_ffree=14, f_favail=14, f_flag=4102, f_namemax=252)
-Elapsed time: 0.3920192199293524 seconds
+Elapsed time: 0.4696886090096086 seconds
