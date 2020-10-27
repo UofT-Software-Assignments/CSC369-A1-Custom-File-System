@@ -892,11 +892,15 @@ int add_bytes(a1fs_inode *inode, int num_bytes, fs_ctx *fs){
 	if(inode->num_extents > 0){
 		memset(get_front(inode, fs), 0, leftover_space);
 	}
-	inode->size += num_bytes;
-	if(leftover_space >= num_bytes) return 0;
+	
+	if(leftover_space >= num_bytes) {
+		inode->size += num_bytes;
+		return 0;
+	}
 
 	int num_blocks = round_up_divide(num_bytes - leftover_space, A1FS_BLOCK_SIZE);
-	if(allocate_blocks(inode, num_blocks, fs) == -1) return -ENOSPC;
+	if(allocate_blocks(inode, num_blocks, fs) != 0) return -ENOSPC;
+	inode->size += num_bytes;
 	return 0;
 }
 
