@@ -479,7 +479,7 @@ int allocate_inode(int *inode_number, fs_ctx *fs){
  * @return           0 on success, -ENOSPC if not enough space available
 **/
 int allocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
-
+	if(fs->sb->free_blocks_count == 0) return -ENOSPC;
 	if(num_blocks > (int)fs->sb->free_blocks_count || inode->num_extents == A1FS_BLOCK_SIZE / sizeof(a1fs_extent)){
 		return -ENOSPC;
 	}
@@ -488,12 +488,11 @@ int allocate_blocks(a1fs_inode *inode, int num_blocks, fs_ctx *fs){
 
 	a1fs_extent extent;
 	
-
-	if(inode->num_extents == 0){
+    //initialize extent map if file empty
+	if(inode->extents == -1){
 		search_bitmap(data_bitmap, num_bits_dmap, 1, &extent);
 		allocate_bit('d', extent.start, fs);
 		inode->extents = extent.start;
-		
 	}
 	
 	a1fs_extent *extents = get_extents(inode, fs);
@@ -531,9 +530,6 @@ int get_last_block(a1fs_inode *inode, fs_ctx *fs){
  * @param fs     file system context
 **/
 void *get_front(a1fs_inode *inode, fs_ctx *fs){
-	if(inode->num_extents == 0){
-		if(allocate_blocks(inode, 1, fs) != 0) return NULL;
-	}
 	int last_block = get_last_block(inode, fs);
 	void *front = fs->image + (fs->sb->first_data_block + last_block) * A1FS_BLOCK_SIZE 
 						+ inode->size % A1FS_BLOCK_SIZE;
@@ -616,6 +612,7 @@ static int a1fs_mkdir(const char *path, mode_t mode)
 	directory->size = 0;
 	clock_gettime(CLOCK_REALTIME, &(directory->mtime));
 	directory->num_extents = 0;
+	directory->extents = -1;
 
 
 	char filename[A1FS_NAME_MAX]; //have to copy like this to avoid bugs
@@ -787,6 +784,7 @@ static int a1fs_create(const char *path, mode_t mode, struct fuse_file_info *fi)
 	clock_gettime(CLOCK_REALTIME, &(inode->mtime));
 	inode->inode_number = inode_number;
 	inode->num_extents = 0;
+	inode->extents = -1;
 
 	//split path string into parent directory and filename
 	char filename[A1FS_NAME_MAX];
@@ -881,15 +879,19 @@ static int a1fs_utimens(const char *path, const struct timespec times[2])
 	
 	return 0;
 }
-//note assumes file is initialized with at least 1 data block
+
+
 int add_bytes(a1fs_inode *inode, int num_bytes, fs_ctx *fs){
 	int leftover_space;
-	if(inode->size > 0 && inode->size % A1FS_BLOCK_SIZE == 0){
+	if(inode->size % A1FS_BLOCK_SIZE == 0){
 		leftover_space = 0;
 	}else{
 		leftover_space = A1FS_BLOCK_SIZE - inode->size % A1FS_BLOCK_SIZE;
 	}
-	memset(get_front(inode, fs), 0, leftover_space);
+	
+	if(inode->num_extents > 0){
+		memset(get_front(inode, fs), 0, leftover_space);
+	}
 	inode->size += num_bytes;
 	if(leftover_space >= num_bytes) return 0;
 
@@ -991,7 +993,7 @@ static int a1fs_read(const char *path, char *buf, size_t size, off_t offset,
 	a1fs_inode *inode;
 	path_lookup(path, &inode, fs);
 
-	if(offset > (int)inode->size) return 0;
+	if(offset > (int)inode->size || inode->size == 0) return 0;
 
 	void *start_byte = get_byte(inode, offset, fs);
 
@@ -1041,8 +1043,10 @@ static int a1fs_write(const char *path, const char *buf, size_t size,
 	path_lookup(path, &inode, fs);
 
 	//ensures file is initialized with at least 1 data block
-	void *curr_front = get_front(inode, fs);
-	if(curr_front == NULL) return -ENOSPC;
+	if(size == 0) return 0;
+	if(inode->extents == -1){
+		if(allocate_blocks(inode, 0, fs) != 0) return -ENOSPC;
+	}
 
 	int error;
 
