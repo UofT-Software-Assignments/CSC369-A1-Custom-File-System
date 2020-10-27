@@ -444,6 +444,7 @@ void allocate_bit(unsigned char map, int bit_number, fs_ctx *fs){
 void allocate_extent(a1fs_extent *extent, fs_ctx *fs){
 	for(unsigned int i = extent->start; i < extent->start + extent->count; i++){
 		allocate_bit('d', i, fs);
+		memset(get_block(i, fs), 0, A1FS_BLOCK_SIZE);
 	}
 }
 
@@ -888,6 +889,7 @@ int add_bytes(a1fs_inode *inode, int num_bytes, fs_ctx *fs){
 	}else{
 		leftover_space = A1FS_BLOCK_SIZE - inode->size % A1FS_BLOCK_SIZE;
 	}
+	memset(get_front(inode, fs), 0, leftover_space);
 	inode->size += num_bytes;
 	if(leftover_space >= num_bytes) return 0;
 
@@ -938,6 +940,25 @@ static int a1fs_truncate(const char *path, off_t size)
 	return 0;
 }
 
+void *get_byte(a1fs_inode *inode, int byte_number, fs_ctx *fs){
+	int data_block_number = -1;
+	int block_num_in_file = byte_number ? round_up_divide(byte_number, A1FS_BLOCK_SIZE) : 1;
+	a1fs_extent *extents = get_extents(inode, fs);
+	int count = 0;
+	for(int i = 0; i < inode->num_extents; i++){
+		a1fs_extent extent = extents[i];
+		count += extent.count;
+		if(count >= block_num_in_file){
+			data_block_number = extent.start + (count - block_num_in_file);
+			break;
+		}
+	}
+
+	void *data_block = get_block(data_block_number, fs);
+	void *start_byte = data_block + byte_number % A1FS_BLOCK_SIZE;
+	return start_byte;
+}
+
 /**
  * Read data from a file.
  *
@@ -972,24 +993,8 @@ static int a1fs_read(const char *path, char *buf, size_t size, off_t offset,
 
 	if(offset > (int)inode->size) return 0;
 
-	//can make this helper to find byte in file
-	//============================================
-	int data_block_number = -1;
-	int block_num_in_file = offset ? round_up_divide(offset, A1FS_BLOCK_SIZE) : 1;
-	a1fs_extent *extents = get_extents(inode, fs);
-	int count = 0;
-	for(int i = 0; i < inode->num_extents; i++){
-		a1fs_extent extent = extents[i];
-		count += extent.count;
-		if(count >= block_num_in_file){
-			data_block_number = extent.start + (count - block_num_in_file);
-			break;
-		}
-	}
+	void *start_byte = get_byte(inode, offset, fs);
 
-	void *data_block = get_block(data_block_number, fs);
-	void *start_byte = data_block + offset % A1FS_BLOCK_SIZE;
-	//=====================================================
 	int bytes_left_in_file = get_front(inode, fs) - start_byte;
 	if(bytes_left_in_file < (int)size){
 		memcpy(buf, start_byte, bytes_left_in_file);
@@ -1035,30 +1040,25 @@ static int a1fs_write(const char *path, const char *buf, size_t size,
 	a1fs_inode *inode;
 	path_lookup(path, &inode, fs);
 
+	//ensures file is initialized with at least 1 data block
+	void *curr_front = get_front(inode, fs);
+	if(curr_front == NULL) return -ENOSPC;
 
 	int error;
 
 	if(offset > (int)inode->size){
-		void *curr_front = get_front(inode, fs);
-		if(curr_front == NULL) return -ENOSPC;
-		int curr_size = inode->size;
-
-		if((error = add_bytes(inode, offset - inode->size, fs)) != 0) return error;
-		
-		//set all bytes between current front of file and offset to zeroes.
 		int num_bytes_uninitialized = offset - inode->size;
-		while(num_bytes_uninitialized > 0){
-			int bytes_left_in_curr_block = A1FS_BLOCK_SIZE - curr_size % A1FS_BLOCK_SIZE;
-			memset(curr_front, 0, bytes_left_in_curr_block);
-			num_bytes_uninitialized -= bytes_left_in_curr_block;
-		}
+		//add bytes from start of file to offset, not they are initialized to 0 by add_bytes
+		if((error = add_bytes(inode, num_bytes_uninitialized, fs)) != 0) return error;
 	}
 	
-	void *offset_front = get_front(inode, fs);
-	if(offset_front == NULL) return -ENOSPC;
-	if((error = add_bytes(inode, size, fs)) != 0) return error;
+	int num_additional_bytes_needed = (offset + size) - inode->size;
+	if(num_additional_bytes_needed > 0){
+		if((error = add_bytes(inode, size, fs)) != 0) return error;
+	}
 
-	memcpy(offset_front, buf, size);
+	void *offset_byte = get_byte(inode, offset, fs);
+	memcpy(offset_byte, buf, size);
 	return size;
 }
 
