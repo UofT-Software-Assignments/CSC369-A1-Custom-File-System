@@ -14,6 +14,5 @@ Functionality that we've tested that works:
 - truncate -s +size existing_file (increasing file size)
 - truncate -s -size existing_file (decreasing file size)
 
-Funtionality that we've found to be bugged:
-...
 
+The runit.sh script can be run as is, it only requires that the root mount point is valid
